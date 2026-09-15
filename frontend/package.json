@@ -1,13 +1,20 @@
 {
   "name": "it-connect-web",
   "private": true,
-  "scripts": {"dev":"next dev","build":"next build","start":"next start","lint":"next lint"},
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "test:e2e": "playwright test"
+  },
   "dependencies": {
     "next": "16.3.3",
     "react": "19.2.0",
     "react-dom": "19.2.0"
   },
   "devDependencies": {
+    "@playwright/test": "1.55.0",
     "@types/node": "22.19.1",
     "@types/react": "19.2.2",
     "@types/react-dom": "19.2.2",
