@@ -7,9 +7,38 @@
 
 Không cần cài Go, Node.js, PostgreSQL, Redis hoặc Python để chạy bản Docker.
 
-## Cách chạy nhanh nhất
+## Windows: một lệnh duy nhất và tự mở trình duyệt
 
-Từ thư mục gốc repository, chạy đúng **một lệnh**:
+Từ thư mục gốc repository, chạy:
+
+```powershell
+.\run.ps1
+```
+
+Hoặc double-click:
+
+```text
+run.bat
+```
+
+Hai cách này sẽ:
+
+1. Build và khởi động toàn bộ stack ở chế độ nền.
+2. Chờ frontend `http://localhost:3000` sẵn sàng.
+3. Tự mở trình duyệt mặc định vào IT Connect.
+
+## Linux/macOS
+
+```bash
+chmod +x run.sh
+./run.sh
+```
+
+Script sẽ build/start toàn bộ stack, chờ frontend sẵn sàng rồi mở trình duyệt nếu hệ điều hành hỗ trợ.
+
+## Cách Docker trực tiếp
+
+Nếu không cần tự mở trình duyệt:
 
 ```bash
 docker compose up --build
@@ -23,7 +52,7 @@ Lệnh này build và khởi động toàn bộ stack:
 - Streamlit dashboard
 - Nginx
 
-Sau khi các container khởi động:
+## Địa chỉ dịch vụ
 
 - Web app: http://localhost:3000
 - API: http://localhost:8080
@@ -60,13 +89,7 @@ ADMIN_PASSWORD=Admin@123456
 
 Không sử dụng các giá trị mặc định này trong production.
 
-## Một lệnh duy nhất cho từng nhu cầu
-
-Chạy và xem log trực tiếp:
-
-```bash
-docker compose up --build
-```
+## Điều khiển hệ thống
 
 Chạy nền:
 
@@ -86,41 +109,46 @@ Xóa cả database volume trong môi trường development:
 docker compose down -v
 ```
 
-## Nếu muốn dùng Make
-
-Lệnh ngắn:
+Xem log:
 
 ```bash
-make dev
-```
-
-Hoặc chạy nền:
-
-```bash
-make up
+docker compose logs -f backend
+docker compose logs -f frontend
+docker compose logs -f postgres
 ```
 
 ## Luồng khởi động
 
 ```text
-Docker Compose
+run.ps1 / run.bat / run.sh
+          |
+          v
+    Docker Compose
+          |
+    +-----+------------------+
+    |                        |
+    v                        v
+PostgreSQL               Go/Gin API
+                           |
+                           +--> JWT / RBAC
+                           +--> Users / Companies / Projects
+                           +--> Permissions / Audit
     |
-    +--> PostgreSQL (healthy)
-    |
-    +--> Go/Gin API
-    |       |
-    |       +--> JWT / RBAC
-    |       +--> Users / Companies / Projects
-    |       +--> Permissions / Audit
-    |
-    +--> Next.js frontend
-    |
-    +--> Streamlit dashboard
-    |
-    +--> Nginx gateway
+    +------------------------------+
+                                   |
+                                   v
+                           Next.js frontend
+
+                           Streamlit dashboard
+
+                           Nginx gateway
 ```
 
 ## Troubleshooting cơ bản
+
+### Docker chưa chạy
+
+Mở Docker Desktop rồi chạy lại `run.ps1` hoặc `run.bat`.
 
 ### Port bị chiếm
 
@@ -136,6 +164,13 @@ Các port mặc định:
 
 Nếu port đã được ứng dụng khác sử dụng, chỉnh mapping trong `docker-compose.yml`.
 
+### Frontend chưa sẵn sàng
+
+```bash
+docker compose ps
+docker compose logs -f frontend
+```
+
 ### Database cũ gây lỗi schema
 
 Chỉ dùng trong development:
@@ -146,14 +181,6 @@ docker compose up --build
 ```
 
 Lệnh `-v` sẽ xóa dữ liệu PostgreSQL của Docker.
-
-### Xem log
-
-```bash
-docker compose logs -f backend
-docker compose logs -f frontend
-docker compose logs -f postgres
-```
 
 ## Production checklist
 
