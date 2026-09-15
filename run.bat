@@ -1,5 +1,5 @@
 @echo off
-setlocal
+setlocal EnableExtensions EnableDelayedExpansion
 cd /d "%~dp0"
 
 echo Starting IT Connect...
@@ -14,10 +14,24 @@ if not exist ".env" (
   echo Created .env from .env.example
 )
 
-docker compose up -d --build
+set IMAGES=postgres:18.6-alpine nginx:1.29-alpine node:22-alpine python:3.13-slim golang:1.27.1 gcr.io/distroless/static-debian12:nonroot
+
+for %%I in (%IMAGES%) do (
+  call :docker_retry "docker pull %%I" "Preparing %%I" 4
+  if errorlevel 1 (
+    echo Unable to prepare %%I after multiple attempts.
+    echo Check Docker Desktop network, proxy, VPN and DNS settings.
+    pause
+    exit /b 1
+  )
+)
+
+call :docker_retry "docker compose up -d --build" "Building and starting IT Connect" 3
 if errorlevel 1 (
   echo.
-  echo Docker Compose failed. Check Docker Desktop and run: docker compose logs
+  echo Docker Compose could not start after multiple attempts.
+  echo Run: docker compose ps
+  echo Run: docker compose logs --tail=100
   pause
   exit /b 1
 )
@@ -32,7 +46,7 @@ for /L %%i in (1,1,60) do (
 echo.
 echo Frontend did not become ready.
 echo Run: docker compose ps
- echo Run: docker compose logs --tail=100
+echo Run: docker compose logs --tail=100
 pause
 exit /b 1
 
@@ -45,3 +59,20 @@ echo Dashboard: http://localhost:8501
 echo Nginx: http://localhost:8088
 echo.
 pause
+exit /b 0
+
+:docker_retry
+set "CMD=%~1"
+set "LABEL=%~2"
+set "MAX=%~3"
+for /L %%A in (1,1,%MAX%) do (
+  echo !LABEL! - attempt %%A/%MAX%...
+  cmd /c "!CMD!"
+  if not errorlevel 1 exit /b 0
+  if %%A LSS %MAX% (
+    set /a DELAY=5*2**(%%A-1)
+    echo Docker operation failed. Retrying in !DELAY! seconds...
+    timeout /t !DELAY! /nobreak >nul
+  )
+)
+exit /b 1
