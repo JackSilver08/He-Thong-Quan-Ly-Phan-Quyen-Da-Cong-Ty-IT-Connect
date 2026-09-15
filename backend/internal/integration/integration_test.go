@@ -8,7 +8,7 @@ import (
 
 	"github.com/it-connect/access-management/internal/db"
 	"github.com/it-connect/access-management/migrations"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func requireIntegration(t *testing.T) string {
@@ -121,37 +121,24 @@ func TestDatabaseConstraintsAndTenantScopingData(t *testing.T) {
 	}
 
 	// Regression guard: same user/project membership cannot be duplicated.
-	_, err = pool.Exec(ctx, `
+	if _, err := pool.Exec(ctx, `
 		INSERT INTO project_members(project_id, user_id, project_role)
-		VALUES($1, $2, 'MEMBER')`, projectA, userA)
-	if err != nil {
+		VALUES($1, $2, 'MEMBER')`, projectA, userA); err != nil {
 		t.Fatalf("create project member: %v", err)
 	}
-	_, err = pool.Exec(ctx, `
+	if _, err := pool.Exec(ctx, `
 		INSERT INTO project_members(project_id, user_id, project_role)
-		VALUES($1, $2, 'MEMBER')`, projectA, userA)
-	if err == nil {
+		VALUES($1, $2, 'MEMBER')`, projectA, userA); err == nil {
 		t.Fatal("duplicate project membership was accepted")
 	}
 
-	// Verify that company-qualified queries return only the requested tenant's records.
-	rows, err := pool.Query(ctx, `SELECT company_id FROM users WHERE id = $1`, userA)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer rows.Close()
-	if !rows.Next() {
-		t.Fatal("test user not found")
-	}
 	var returnedCompany string
-	if err := rows.Scan(&returnedCompany); err != nil {
+	if err := pool.QueryRow(ctx, `SELECT company_id FROM users WHERE id = $1`, userA).Scan(&returnedCompany); err != nil {
 		t.Fatal(err)
 	}
 	if returnedCompany != companyA {
 		t.Fatalf("user tenant mismatch: got %s want %s", returnedCompany, companyA)
 	}
-
-	_ = companyB
 }
 
 func TestUniqueViolationIsReturnedAsPostgresError(t *testing.T) {
@@ -178,12 +165,11 @@ func TestUniqueViolationIsReturnedAsPostgresError(t *testing.T) {
 }
 
 func isPgCode(err error, code string) bool {
-	pgErr, ok := err.(*pgconn.PgError)
-	if ok {
+	if pgErr, ok := err.(*pgconn.PgError); ok {
 		return pgErr.Code == code
 	}
 	if wrapper, ok := err.(interface{ Unwrap() error }); ok {
 		return isPgCode(wrapper.Unwrap(), code)
 	}
-	return err == pgx.ErrNoRows && code == "P0002"
+	return false
 }
