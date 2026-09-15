@@ -6,7 +6,7 @@ import { ACTIONS, byId, labelOf, timeAgo, USER_STATUS } from '@/lib/format';
 import { useList } from '@/lib/hooks';
 import { groupPermissions, hasAccess, type PermissionEntry } from '@/lib/permissions';
 import type { AuditLog, Company, Department, Permission, Project, User } from '@/lib/types';
-import { useMe } from '@/components/AppShell';
+import { useCanManage, useMe } from '@/components/AppShell';
 import { AuditText } from '@/components/AuditText';
 import { buttonClass } from '@/components/ui/Button';
 import { DataTable, type Column } from '@/components/ui/DataTable';
@@ -26,6 +26,7 @@ type CompanyRow = Company & { active: number; departments: number; projects: num
 
 export default function DashboardPage() {
   const me = useMe();
+  const canManage = useCanManage();
   const users = useList<User>('/users');
   const companies = useList<Company>('/companies');
   const departments = useList<Department>('/departments');
@@ -98,16 +99,18 @@ export default function DashboardPage() {
         title="Bảng điều khiển"
         description={`${greeting} Tình hình nhân sự và quyền truy cập trên toàn hệ thống.`}
         actions={
-          <>
-            <Link href="/permissions?new=1" className={buttonClass('secondary')}>
-              <Icon name="shield" />
-              <span>Cấp quyền</span>
-            </Link>
-            <Link href="/users?new=1" className={buttonClass('primary')}>
-              <Icon name="user-plus" />
-              <span>Thêm nhân viên</span>
-            </Link>
-          </>
+          canManage && (
+            <>
+              <Link href="/permissions?new=1" className={buttonClass('secondary')}>
+                <Icon name="shield" />
+                <span>Cấp quyền</span>
+              </Link>
+              <Link href="/users?new=1" className={buttonClass('primary')}>
+                <Icon name="user-plus" />
+                <span>Thêm nhân viên</span>
+              </Link>
+            </>
+          )
         }
       />
 

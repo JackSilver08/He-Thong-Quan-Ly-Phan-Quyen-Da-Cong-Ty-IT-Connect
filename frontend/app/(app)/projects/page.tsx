@@ -7,6 +7,7 @@ import { labelOf, matches, RECORD_STATUS } from '@/lib/format';
 import { useForm, useList } from '@/lib/hooks';
 import { groupPermissions, hasAccess } from '@/lib/permissions';
 import type { Company, Permission, Project } from '@/lib/types';
+import { useCanManage } from '@/components/AppShell';
 import { Button } from '@/components/ui/Button';
 import { useConfirm } from '@/components/ui/Confirm';
 import { DataTable, type Column } from '@/components/ui/DataTable';
@@ -22,6 +23,7 @@ export default function ProjectsPage() {
   const toast = useToast();
   const confirm = useConfirm();
   const router = useRouter();
+  const canManage = useCanManage();
   const projects = useList<Project>('/projects');
   const companies = useList<Company>('/companies');
   const permissions = useList<Permission>('/permissions');
@@ -110,9 +112,9 @@ export default function ProjectsPage() {
         <RowMenu
           label={`Thao tác với ${p.name}`}
           items={[
-            { label: 'Sửa dự án', icon: 'pencil', onSelect: () => setModal({ open: true, project: p }) },
+            { label: 'Sửa dự án', icon: 'pencil', hidden: !canManage, onSelect: () => setModal({ open: true, project: p }) },
             { label: 'Xem phân quyền', icon: 'shield', onSelect: () => router.push(`/permissions?project=${p.id}`) },
-            { label: 'Xoá dự án', icon: 'trash', danger: true, onSelect: () => remove(p) },
+            { label: 'Xoá dự án', icon: 'trash', danger: true, hidden: !canManage, onSelect: () => remove(p) },
           ]}
         />
       ),
@@ -129,9 +131,11 @@ export default function ProjectsPage() {
         title="Dự án"
         description="Dự án gắn với công ty và thư mục trên File Server — đơn vị để cấp quyền truy cập."
         actions={
-          <Button variant="primary" icon="plus" onClick={openCreate}>
-            Thêm dự án
-          </Button>
+          canManage && (
+            <Button variant="primary" icon="plus" onClick={openCreate}>
+              Thêm dự án
+            </Button>
+          )
         }
       />
       <Card>
@@ -169,9 +173,11 @@ export default function ProjectsPage() {
                 title="Chưa có dự án"
                 description="Tạo dự án và khai báo thư mục File Server để bắt đầu cấp quyền cho nhân viên."
                 action={
-                  <Button variant="primary" icon="plus" onClick={openCreate}>
-                    Thêm dự án
-                  </Button>
+                  canManage && (
+                    <Button variant="primary" icon="plus" onClick={openCreate}>
+                      Thêm dự án
+                    </Button>
+                  )
                 }
               />
             )

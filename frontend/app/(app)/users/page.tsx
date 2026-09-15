@@ -7,7 +7,7 @@ import { byId, clearQuery, labelOf, matches, readQuery, ROLE_ORDER, ROLES, USER_
 import { useForm, useList } from '@/lib/hooks';
 import { groupPermissions, hasAccess, revokeEntries, type PermissionEntry } from '@/lib/permissions';
 import type { Company, Department, Permission, Project, User } from '@/lib/types';
-import { useMe } from '@/components/AppShell';
+import { useCanManage, useMe } from '@/components/AppShell';
 import { Button } from '@/components/ui/Button';
 import { useConfirm } from '@/components/ui/Confirm';
 import { DataTable, type Column } from '@/components/ui/DataTable';
@@ -27,6 +27,7 @@ export default function UsersPage() {
   const confirm = useConfirm();
   const router = useRouter();
   const me = useMe();
+  const canManage = useCanManage();
   const users = useList<User>('/users');
   const companies = useList<Company>('/companies');
   const departments = useList<Department>('/departments');
@@ -127,15 +128,17 @@ export default function UsersPage() {
       className: 'col-actions',
       render: (u) => {
         const self = me?.id === u.id;
+        // Tài khoản Quản trị cấp cao chỉ Quản trị cấp cao khác được thay đổi.
+        const editable = canManage && (u.role !== 'SUPER_ADMIN' || me?.role === 'SUPER_ADMIN');
         return (
           <RowMenu
             label={`Thao tác với ${u.full_name}`}
             items={[
-              { label: 'Sửa thông tin', icon: 'pencil', onSelect: () => setEditor({ open: true, user: u }) },
+              { label: 'Sửa thông tin', icon: 'pencil', hidden: !editable, onSelect: () => setEditor({ open: true, user: u }) },
               { label: 'Xem quyền truy cập', icon: 'shield', onSelect: () => router.push(`/permissions?user=${u.id}`) },
-              { label: 'Cho nghỉ việc', icon: 'user-x', hidden: u.status !== 'ACTIVE' || self, onSelect: () => setResign({ open: true, user: u }) },
-              // Backend không cho xoá tài khoản "admin" (bỏ qua mà không báo lỗi), nên ẩn thao tác này.
-              { label: 'Xoá nhân viên', icon: 'trash', danger: true, hidden: u.username === 'admin' || self, onSelect: () => remove(u) },
+              { label: 'Cho nghỉ việc', icon: 'user-x', hidden: !editable || u.status !== 'ACTIVE' || self, onSelect: () => setResign({ open: true, user: u }) },
+              // "admin" là tài khoản quản trị mặc định (ADMIN_USERNAME), API không cho xoá.
+              { label: 'Xoá nhân viên', icon: 'trash', danger: true, hidden: !editable || u.username === 'admin' || self, onSelect: () => remove(u) },
             ]}
           />
         );
@@ -154,9 +157,11 @@ export default function UsersPage() {
         title="Nhân viên"
         description="Hồ sơ nhân sự, tài khoản đăng nhập và vòng đời truy cập."
         actions={
-          <Button variant="primary" icon="user-plus" onClick={openCreate}>
-            Thêm nhân viên
-          </Button>
+          canManage && (
+            <Button variant="primary" icon="user-plus" onClick={openCreate}>
+              Thêm nhân viên
+            </Button>
+          )
         }
       />
       <Card>
@@ -214,9 +219,11 @@ export default function UsersPage() {
                 title="Chưa có nhân viên"
                 description="Thêm nhân viên để cấp tài khoản và phân quyền truy cập dự án."
                 action={
-                  <Button variant="primary" icon="user-plus" onClick={openCreate}>
-                    Thêm nhân viên
-                  </Button>
+                  canManage && (
+                    <Button variant="primary" icon="user-plus" onClick={openCreate}>
+                      Thêm nhân viên
+                    </Button>
+                  )
                 }
               />
             )
@@ -276,7 +283,11 @@ type UserModalProps = {
 
 function UserModal({ open, user, companies, departments, defaultCompanyId, onClose, onSaved }: UserModalProps) {
   const toast = useToast();
+  const me = useMe();
   const form = useForm<UserForm>(emptyUser);
+  const isSelf = !!user && me?.id === user.id;
+  // Chỉ Quản trị cấp cao mới gán được vai trò Quản trị cấp cao.
+  const roleOptions = ROLE_ORDER.filter((role) => role !== 'SUPER_ADMIN' || me?.role === 'SUPER_ADMIN');
   const { values, set, errors, busy, reset } = form;
 
   useEffect(() => {
@@ -421,9 +432,9 @@ function UserModal({ open, user, companies, departments, defaultCompanyId, onClo
           <Field label="Tên đăng nhập" required error={errors.username}>
             <Input value={values.username} onChange={(e) => set('username', e.target.value)} placeholder="VD: an.nguyen" autoComplete="off" autoCapitalize="none" spellCheck={false} />
           </Field>
-          <Field label="Vai trò">
-            <Select value={values.role} onChange={(e) => set('role', e.target.value)}>
-              {ROLE_ORDER.map((role) => (
+          <Field label="Vai trò" hint={isSelf ? 'Bạn không thể tự đổi vai trò của mình.' : undefined}>
+            <Select value={values.role} disabled={isSelf} onChange={(e) => set('role', e.target.value)}>
+              {roleOptions.map((role) => (
                 <option key={role} value={role}>
                   {ROLES[role].label}
                 </option>

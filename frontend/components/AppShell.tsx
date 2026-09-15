@@ -1,14 +1,15 @@
 'use client';
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { api, getToken, logout } from '@/lib/api';
+import { api, ApiError, getToken, logout } from '@/lib/api';
 import { ROLES } from '@/lib/format';
 import type { User } from '@/lib/types';
 import logo from '@/public/logo.png';
+import { Button } from './ui/Button';
 import { useConfirm } from './ui/Confirm';
-import { Avatar } from './ui/Display';
+import { Avatar, EmptyState } from './ui/Display';
 import { Icon, type IconName } from './ui/Icon';
 
 type NavItem = { href: string; label: string; icon: IconName };
@@ -41,11 +42,31 @@ const NAV: Array<{ group?: string; items: NavItem[] }> = [
 
 const isActive = (pathname: string, href: string) => (href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(`${href}/`));
 
+// Khớp với phân quyền của API: AUDITOR chỉ xem, USER không vào được trang quản trị.
+const PANEL_ROLES = ['SUPER_ADMIN', 'ADMIN', 'AUDITOR'];
+const MANAGE_ROLES = ['SUPER_ADMIN', 'ADMIN'];
+
 const MeContext = createContext<User | null>(null);
 
-/** Người đang đăng nhập (null khi đang tải). */
+/** Người đang đăng nhập; các trang bên trong khung app luôn có giá trị. */
 export function useMe() {
   return useContext(MeContext);
+}
+
+/** Được thêm, sửa, xoá dữ liệu (Kiểm soát viên chỉ được xem). */
+export function useCanManage() {
+  const me = useMe();
+  return !!me && MANAGE_ROLES.includes(me.role);
+}
+
+function Gate({ icon, title, description, children }: { icon: IconName; title: string; description: string; children: ReactNode }) {
+  return (
+    <div className="boot">
+      <div className="card gate">
+        <EmptyState icon={icon} title={title} description={description} action={<div className="gate-actions">{children}</div>} />
+      </div>
+    </div>
+  );
 }
 
 export default function AppShell({ children }: { children: ReactNode }) {
@@ -54,9 +75,20 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const confirm = useConfirm();
   const [ready, setReady] = useState(false);
   const [me, setMe] = useState<User | null>(null);
+  const [loadError, setLoadError] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
 
   const current = NAV.flatMap((group) => group.items).find((item) => isActive(pathname, item.href));
+
+  const loadMe = useCallback(() => {
+    setLoadError(false);
+    api<User>('/auth/me')
+      .then(setMe)
+      .catch((err) => {
+        // 401 đã tự chuyển về trang đăng nhập.
+        if (!(err instanceof ApiError && err.status === 401)) setLoadError(true);
+      });
+  }, []);
 
   useEffect(() => {
     if (!getToken()) {
@@ -64,8 +96,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
       return;
     }
     setReady(true);
-    api<User>('/auth/me').then(setMe).catch(() => {});
-  }, [router]);
+    loadMe();
+  }, [router, loadMe]);
 
   useEffect(() => {
     setNavOpen(false);
@@ -89,11 +121,38 @@ export default function AppShell({ children }: { children: ReactNode }) {
     if (ok) logout();
   };
 
-  if (!ready) {
+  if (!ready || (!me && !loadError)) {
     return (
       <div className="boot" aria-busy="true">
         <span className="spinner spinner-lg" />
       </div>
+    );
+  }
+
+  if (!me) {
+    return (
+      <Gate icon="circle-alert" title="Không tải được thông tin tài khoản" description="Kiểm tra kết nối tới máy chủ rồi thử lại.">
+        <Button variant="primary" onClick={loadMe}>
+          Thử lại
+        </Button>
+        <Button icon="log-out" onClick={logout}>
+          Đăng xuất
+        </Button>
+      </Gate>
+    );
+  }
+
+  if (!PANEL_ROLES.includes(me.role)) {
+    return (
+      <Gate
+        icon="shield-off"
+        title="Tài khoản không có quyền truy cập"
+        description={`Trang quản trị chỉ dành cho Quản trị viên và Kiểm soát viên. Tài khoản ${me.username} hiện là ${ROLES[me.role]?.label ?? me.role}.`}
+      >
+        <Button variant="primary" icon="log-out" onClick={logout}>
+          Đăng xuất
+        </Button>
+      </Gate>
     );
   }
 
@@ -121,19 +180,11 @@ export default function AppShell({ children }: { children: ReactNode }) {
             ))}
           </nav>
           <div className="sidebar-user">
-            {me ? (
-              <>
-                <Avatar name={me.full_name} />
-                <div className="sidebar-user-info">
-                  <strong title={me.full_name}>{me.full_name}</strong>
-                  <span>{ROLES[me.role]?.label ?? me.role}</span>
-                </div>
-              </>
-            ) : (
-              <div className="sidebar-user-info">
-                <span className="skeleton skeleton-dark" />
-              </div>
-            )}
+            <Avatar name={me.full_name} />
+            <div className="sidebar-user-info">
+              <strong title={me.full_name}>{me.full_name}</strong>
+              <span>{ROLES[me.role]?.label ?? me.role}</span>
+            </div>
             <button type="button" className="icon-btn icon-btn-dark" aria-label="Đăng xuất" title="Đăng xuất" onClick={signOut}>
               <Icon name="log-out" />
             </button>
@@ -147,7 +198,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
               <Icon name="menu" />
             </button>
             <span className="mobile-bar-title">{current?.label ?? 'IT Connect'}</span>
-            {me && <Avatar name={me.full_name} size="sm" />}
+            <Avatar name={me.full_name} size="sm" />
           </header>
           <main className="content">{children}</main>
         </div>

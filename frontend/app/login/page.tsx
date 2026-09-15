@@ -62,13 +62,6 @@ export default function Login() {
               {loading ? 'Đang đăng nhập...' : 'Enter'}
             </button>
           </div>
-
-          <p className={styles.register}>
-            <span>Bạn chưa có tài khoản ?</span>
-            <button type="button" className={styles.registerLink} onClick={() => toast.info('Chưa hỗ trợ tự đăng ký', 'Vui lòng liên hệ quản trị viên để được cấp tài khoản.')}>
-              Đăng kí
-            </button>
-          </p>
         </form>
       </main>
 

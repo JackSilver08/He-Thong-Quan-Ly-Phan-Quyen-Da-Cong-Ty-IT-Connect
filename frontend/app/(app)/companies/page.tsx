@@ -4,6 +4,7 @@ import { api, errorMessage } from '@/lib/api';
 import { labelOf, matches, RECORD_STATUS } from '@/lib/format';
 import { useForm, useList } from '@/lib/hooks';
 import type { Company, Project, User } from '@/lib/types';
+import { useCanManage } from '@/components/AppShell';
 import { Button } from '@/components/ui/Button';
 import { useConfirm } from '@/components/ui/Confirm';
 import { DataTable, type Column } from '@/components/ui/DataTable';
@@ -18,6 +19,7 @@ import { ResultCount, SearchInput, Toolbar } from '@/components/ui/Toolbar';
 export default function CompaniesPage() {
   const toast = useToast();
   const confirm = useConfirm();
+  const canManage = useCanManage();
   const companies = useList<Company>('/companies');
   const users = useList<User>('/users');
   const projects = useList<Project>('/projects');
@@ -50,7 +52,7 @@ export default function CompaniesPage() {
     }
   };
 
-  const columns: Column<Company>[] = [
+  const allColumns: Column<Company>[] = [
     { key: 'code', header: 'Mã', width: 140, sort: (c) => c.code, render: (c) => <span className="code-chip">{c.code}</span> },
     {
       key: 'name',
@@ -82,6 +84,7 @@ export default function CompaniesPage() {
       ),
     },
   ];
+  const columns = canManage ? allColumns : allColumns.filter((column) => column.key !== 'actions');
 
   const openCreate = () => setModal({ open: true, company: null });
 
@@ -92,9 +95,11 @@ export default function CompaniesPage() {
         title="Công ty"
         description="Các công ty thành viên dùng chung hệ thống phân quyền."
         actions={
-          <Button variant="primary" icon="plus" onClick={openCreate}>
-            Thêm công ty
-          </Button>
+          canManage && (
+            <Button variant="primary" icon="plus" onClick={openCreate}>
+              Thêm công ty
+            </Button>
+          )
         }
       />
       <Card>
@@ -119,9 +124,11 @@ export default function CompaniesPage() {
                 title="Chưa có công ty"
                 description="Thêm công ty đầu tiên để bắt đầu quản lý phòng ban, nhân viên và dự án."
                 action={
-                  <Button variant="primary" icon="plus" onClick={openCreate}>
-                    Thêm công ty
-                  </Button>
+                  canManage && (
+                    <Button variant="primary" icon="plus" onClick={openCreate}>
+                      Thêm công ty
+                    </Button>
+                  )
                 }
               />
             )

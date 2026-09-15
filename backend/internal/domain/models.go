@@ -2,6 +2,38 @@ package domain
 
 import "time"
 
+// Roles. SUPER_ADMIN and ADMIN manage data, AUDITOR has read-only access to the admin API,
+// USER accounts are managed employees without access to the admin API.
+const (
+	RoleSuperAdmin = "SUPER_ADMIN"
+	RoleAdmin      = "ADMIN"
+	RoleAuditor    = "AUDITOR"
+	RoleUser       = "USER"
+)
+
+// User statuses.
+const (
+	StatusActive   = "ACTIVE"
+	StatusResigned = "RESIGNED"
+	StatusDisabled = "DISABLED"
+)
+
+func ValidRole(role string) bool {
+	switch role {
+	case RoleSuperAdmin, RoleAdmin, RoleAuditor, RoleUser:
+		return true
+	}
+	return false
+}
+
+func ValidUserStatus(status string) bool {
+	switch status {
+	case StatusActive, StatusResigned, StatusDisabled:
+		return true
+	}
+	return false
+}
+
 type User struct {
 	ID             string     `json:"id"`
 	EmployeeCode   string     `json:"employee_code"`
@@ -31,9 +63,9 @@ type Company struct {
 }
 
 type Department struct {
-	ID        string    `json:"id"`
-	CompanyID string    `json:"company_id"`
-	Name      string    `json:"name"`
+	ID        string `json:"id"`
+	CompanyID string `json:"company_id"`
+	Name      string `json:"name"`
 }
 
 type Project struct {

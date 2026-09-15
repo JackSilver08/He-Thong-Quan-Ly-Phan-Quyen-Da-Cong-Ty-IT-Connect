@@ -5,6 +5,7 @@ import { byId, clearQuery, labelOf, LEVELS, LEVEL_ORDER, matches, readQuery, USE
 import { useForm, useList } from '@/lib/hooks';
 import { entryKey, groupPermissions, hasAccess, type PermissionEntry } from '@/lib/permissions';
 import type { Company, Permission, Project, User } from '@/lib/types';
+import { useCanManage } from '@/components/AppShell';
 import { LevelBadge, LevelLetter, LevelPicker } from '@/components/PermissionLevel';
 import { Button } from '@/components/ui/Button';
 import { useConfirm } from '@/components/ui/Confirm';
@@ -26,6 +27,7 @@ const noFilters: Filters = { userId: '', projectId: '', level: '', showRevoked: 
 export default function PermissionsPage() {
   const toast = useToast();
   const confirm = useConfirm();
+  const canManage = useCanManage();
   const permissions = useList<Permission>('/permissions');
   const users = useList<User>('/users');
   const projects = useList<Project>('/projects');
@@ -115,7 +117,7 @@ export default function PermissionsPage() {
     }
   };
 
-  const columns: Column<PermissionEntry>[] = [
+  const allColumns: Column<PermissionEntry>[] = [
     {
       key: 'user',
       header: 'Nhân viên',
@@ -170,6 +172,7 @@ export default function PermissionsPage() {
       ),
     },
   ];
+  const columns = canManage ? allColumns : allColumns.filter((column) => column.key !== 'actions');
 
   const loading = permissions.loading || users.loading || projects.loading;
   const filtered = !!(query || chips.length);
@@ -182,16 +185,18 @@ export default function PermissionsPage() {
         title="Phân quyền"
         description="Ai được vào dự án nào, với mức quyền gì."
         actions={
-          <Button variant="primary" icon="plus" onClick={openGrant}>
-            Cấp quyền
-          </Button>
+          canManage && (
+            <Button variant="primary" icon="plus" onClick={openGrant}>
+              Cấp quyền
+            </Button>
+          )
         }
       />
 
       {conflictCount > 0 && (
         <div className="page-alert">
           <Alert tone="warning" title={`Phát hiện ${conflictCount} quyền bị trùng lặp dữ liệu`}>
-            Cùng một nhân viên và dự án đang có nhiều bản ghi với mức quyền khác nhau, nên không xác định được mức đang áp dụng. Giao diện hiển thị mức cao nhất để cảnh báo rủi ro; cần xử lý trùng lặp ở phía máy chủ.
+            Cùng một nhân viên và dự án đang có nhiều bản ghi với mức quyền khác nhau, nên không xác định được mức đang áp dụng. Giao diện hiển thị mức cao nhất để cảnh báo rủi ro. Khởi động lại dịch vụ API để migration tự dọn dữ liệu trùng.
           </Alert>
         </div>
       )}
@@ -251,9 +256,11 @@ export default function PermissionsPage() {
                   title="Chưa cấp quyền nào"
                   description="Cấp quyền để nhân viên truy cập thư mục dự án trên File Server."
                   action={
-                    <Button variant="primary" icon="plus" onClick={openGrant}>
-                      Cấp quyền
-                    </Button>
+                    canManage && (
+                      <Button variant="primary" icon="plus" onClick={openGrant}>
+                        Cấp quyền
+                      </Button>
+                    )
                   }
                 />
               )
@@ -261,7 +268,7 @@ export default function PermissionsPage() {
           />
         </Card>
       ) : (
-        <PermissionMatrix users={users.data} projects={projects.data} companies={companies.data} entries={entries} loading={loading} onSet={setLevel} />
+        <PermissionMatrix users={users.data} projects={projects.data} companies={companies.data} entries={entries} loading={loading} readOnly={!canManage} onSet={setLevel} />
       )}
 
       <GrantModal
@@ -283,11 +290,12 @@ type MatrixProps = {
   companies: Company[];
   entries: PermissionEntry[];
   loading: boolean;
+  readOnly: boolean;
   onSet: (user: User, project: Project, level: string) => Promise<void>;
 };
 
 /** Bảng Nhân viên × Dự án của một công ty; bấm vào ô để đổi mức quyền. */
-function PermissionMatrix({ users, projects, companies, entries, loading, onSet }: MatrixProps) {
+function PermissionMatrix({ users, projects, companies, entries, loading, readOnly, onSet }: MatrixProps) {
   const [companyId, setCompanyId] = useState('');
   const [query, setQuery] = useState('');
   const [onlyWithAccess, setOnlyWithAccess] = useState(false);
@@ -376,18 +384,24 @@ function PermissionMatrix({ users, projects, companies, entries, loading, onSet 
                     const label = entry ? (entry.conflict ? 'Xung đột dữ liệu' : LEVELS[entry.level]?.label) : 'Chưa cấp quyền';
                     return (
                       <td key={p.id}>
-                        <button
-                          type="button"
-                          className={`matrix-cell${picker?.user.id === u.id && picker.project.id === p.id ? ' is-open' : ''}`}
-                          aria-label={`${u.full_name}, ${p.code}: ${label}. Bấm để đổi.`}
-                          title={label}
-                          onClick={(event) => {
-                            anchorRef.current = event.currentTarget;
-                            setPicker({ user: u, project: p });
-                          }}
-                        >
-                          <LevelLetter level={entry?.level} conflict={entry?.conflict} />
-                        </button>
+                        {readOnly ? (
+                          <span className="matrix-cell is-readonly" title={label} aria-label={`${u.full_name}, ${p.code}: ${label}`}>
+                            <LevelLetter level={entry?.level} conflict={entry?.conflict} />
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            className={`matrix-cell${picker?.user.id === u.id && picker.project.id === p.id ? ' is-open' : ''}`}
+                            aria-label={`${u.full_name}, ${p.code}: ${label}. Bấm để đổi.`}
+                            title={label}
+                            onClick={(event) => {
+                              anchorRef.current = event.currentTarget;
+                              setPicker({ user: u, project: p });
+                            }}
+                          >
+                            <LevelLetter level={entry?.level} conflict={entry?.conflict} />
+                          </button>
+                        )}
                       </td>
                     );
                   })}

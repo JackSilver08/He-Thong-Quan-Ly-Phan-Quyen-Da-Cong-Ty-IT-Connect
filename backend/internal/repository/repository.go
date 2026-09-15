@@ -3,20 +3,96 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/it-connect/access-management/internal/domain"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type Repository struct {4
+type Repository struct {
 	DB *pgxpool.Pool
 }
 
 func New(db *pgxpool.Pool) *Repository {
 	return &Repository{DB: db}
+}
+
+// ErrNotFound is returned when the targeted row does not exist or was soft-deleted.
+var ErrNotFound = errors.New("not found")
+
+// DepartmentInUseError is returned when deleting a department that still has users.
+type DepartmentInUseError struct{ Users int }
+
+func (e *DepartmentInUseError) Error() string {
+	return fmt.Sprintf("department has %d active user(s)", e.Users)
+}
+
+// IsConflict reports whether err is a unique or foreign-key violation.
+func IsConflict(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && (pgErr.Code == "23505" || pgErr.Code == "23503")
+}
+
+// IsInvalidInput reports whether PostgreSQL rejected a value, e.g. a malformed UUID or date.
+func IsInvalidInput(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && (pgErr.Code == "22P02" || pgErr.Code == "22007" || pgErr.Code == "22008")
+}
+
+func notFound(err error) error {
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrNotFound
+	}
+	return err
+}
+
+func requireAffected(tag pgconn.CommandTag, err error) error {
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// AccountState returns the current role and status of a user that has not been deleted.
+func (r *Repository) AccountState(ctx context.Context, userID string) (role, status string, err error) {
+	err = r.DB.QueryRow(ctx, `
+		SELECT role, status FROM users
+		WHERE id = $1 AND deleted_at IS NULL`, userID).Scan(&role, &status)
+	return role, status, notFound(err)
+}
+
+const userColumns = `
+		SELECT u.id, u.employee_code, u.username, u.full_name,
+			COALESCE(u.email, ''), COALESCE(u.phone, ''),
+			u.company_id, u.department_id, d.name, c.name,
+			u.role, u.status, u.joined_at, u.resigned_at,
+			u.replacement_user_id, COALESCE(u.notes, '')
+		FROM users u
+		JOIN companies c ON c.id = u.company_id
+		LEFT JOIN departments d ON d.id = u.department_id`
+
+func scanUser(row pgx.Row) (domain.User, error) {
+	var u domain.User
+	err := row.Scan(
+		&u.ID, &u.EmployeeCode, &u.Username, &u.FullName,
+		&u.Email, &u.Phone, &u.CompanyID, &u.DepartmentID,
+		&u.DepartmentName, &u.CompanyName, &u.Role, &u.Status,
+		&u.JoinedAt, &u.ResignedAt, &u.ReplacementID, &u.Notes,
+	)
+	return u, err
+}
+
+// FindUser returns a user that has not been deleted.
+func (r *Repository) FindUser(ctx context.Context, id string) (domain.User, error) {
+	u, err := scanUser(r.DB.QueryRow(ctx, userColumns+` WHERE u.id = $1 AND u.deleted_at IS NULL`, id))
+	return u, notFound(err)
 }
 
 func (r *Repository) FindLoginUser(ctx context.Context, username string) (string, domain.User, error) {
@@ -118,20 +194,20 @@ func (r *Repository) UpdateCompany(ctx context.Context, id string, c domain.Comp
 	c.Name = strings.TrimSpace(c.Name)
 	err := r.DB.QueryRow(ctx, `
 		UPDATE companies
-		SET code = $2, name = $3, description = $4, status = $5, updated_at = NOW()
+		SET code = $2, name = $3, description = $4,
+			status = COALESCE(NULLIF($5, ''), status), updated_at = NOW()
 		WHERE id = $1 AND deleted_at IS NULL
 		RETURNING id, code, name, description, status, created_at`,
 		id, c.Code, c.Name, c.Description, c.Status,
 	).Scan(&c.ID, &c.Code, &c.Name, &c.Description, &c.Status, &c.CreatedAt)
-	return c, err
+	return c, notFound(err)
 }
 
 func (r *Repository) DeleteCompany(ctx context.Context, id string) error {
-	_, err := r.DB.Exec(ctx, `
+	return requireAffected(r.DB.Exec(ctx, `
 		UPDATE companies
 		SET deleted_at = NOW(), updated_at = NOW()
-		WHERE id = $1 AND deleted_at IS NULL`, id)
-	return err
+		WHERE id = $1 AND deleted_at IS NULL`, id))
 }
 
 func (r *Repository) ListDepartments(ctx context.Context, companyID, q string) ([]domain.Department, error) {
@@ -189,7 +265,14 @@ func (r *Repository) UpdateDepartment(ctx context.Context, id string, d domain.D
 		WHERE id = $1
 		RETURNING id, company_id, name`, id, d.Name).
 		Scan(&d.ID, &d.CompanyID, &d.Name)
-	return d, err
+	return d, notFound(err)
+}
+
+// DepartmentCompany returns the company a department belongs to.
+func (r *Repository) DepartmentCompany(ctx context.Context, id string) (string, error) {
+	var companyID string
+	err := r.DB.QueryRow(ctx, `SELECT company_id FROM departments WHERE id = $1`, id).Scan(&companyID)
+	return companyID, notFound(err)
 }
 
 func (r *Repository) DeleteDepartment(ctx context.Context, id string) error {
@@ -201,22 +284,13 @@ func (r *Repository) DeleteDepartment(ctx context.Context, id string) error {
 		return err
 	}
 	if users > 0 {
-		return fmt.Errorf("department has %d active user(s)", users)
+		return &DepartmentInUseError{Users: users}
 	}
-	_, err := r.DB.Exec(ctx, `DELETE FROM departments WHERE id = $1`, id)
-	return err
+	return requireAffected(r.DB.Exec(ctx, `DELETE FROM departments WHERE id = $1`, id))
 }
 
 func (r *Repository) ListUsers(ctx context.Context, q, status, companyID, departmentID string) ([]domain.User, error) {
-	query := `
-		SELECT u.id, u.employee_code, u.username, u.full_name,
-			COALESCE(u.email, ''), COALESCE(u.phone, ''),
-			u.company_id, u.department_id, d.name, c.name,
-			u.role, u.status, u.joined_at, u.resigned_at,
-			u.replacement_user_id, COALESCE(u.notes, '')
-		FROM users u
-		JOIN companies c ON c.id = u.company_id
-		LEFT JOIN departments d ON d.id = u.department_id
+	query := userColumns + `
 		WHERE u.deleted_at IS NULL`
 	args := []any{}
 	n := 1
@@ -257,13 +331,8 @@ func (r *Repository) ListUsers(ctx context.Context, q, status, companyID, depart
 
 	out := []domain.User{}
 	for rows.Next() {
-		var u domain.User
-		if err := rows.Scan(
-			&u.ID, &u.EmployeeCode, &u.Username, &u.FullName,
-			&u.Email, &u.Phone, &u.CompanyID, &u.DepartmentID,
-			&u.DepartmentName, &u.CompanyName, &u.Role, &u.Status,
-			&u.JoinedAt, &u.ResignedAt, &u.ReplacementID, &u.Notes,
-		); err != nil {
+		u, err := scanUser(rows)
+		if err != nil {
 			return nil, err
 		}
 		out = append(out, u)
@@ -323,27 +392,27 @@ func (r *Repository) UpdateUser(ctx context.Context, id string, u domain.User) (
 		&u.Email, &u.Phone, &u.CompanyID, &u.DepartmentID,
 		&u.Role, &u.Status, &u.JoinedAt, &u.Notes,
 	)
-	return u, err
+	return u, notFound(err)
 }
 
+// DeleteUser soft-deletes a user. Callers are responsible for protecting built-in accounts.
 func (r *Repository) DeleteUser(ctx context.Context, id string) error {
-	_, err := r.DB.Exec(ctx, `
+	return requireAffected(r.DB.Exec(ctx, `
 		UPDATE users
 		SET deleted_at = NOW(), status = 'DISABLED', updated_at = NOW()
-		WHERE id = $1 AND username <> 'admin'`, id)
-	return err
+		WHERE id = $1 AND deleted_at IS NULL`, id))
 }
 
+// MarkResigned resigns an active user; it returns ErrNotFound when the user is missing or no longer active.
 func (r *Repository) MarkResigned(ctx context.Context, id string, replacementID *string, note string) error {
-	_, err := r.DB.Exec(ctx, `
+	return requireAffected(r.DB.Exec(ctx, `
 		UPDATE users
 		SET status = 'RESIGNED',
 			resigned_at = CURRENT_DATE,
 			replacement_user_id = $2,
 			notes = $3,
 			updated_at = NOW()
-		WHERE id = $1 AND deleted_at IS NULL`, id, replacementID, note)
-	return err
+		WHERE id = $1 AND deleted_at IS NULL AND status = 'ACTIVE'`, id, replacementID, note))
 }
 
 func (r *Repository) ListProjects(ctx context.Context, q, companyID string) ([]domain.Project, error) {
@@ -405,7 +474,7 @@ func (r *Repository) UpdateProject(ctx context.Context, id string, p domain.Proj
 		SET company_id = $2,
 			code = $3,
 			name = $4,
-			status = $5,
+			status = COALESCE(NULLIF($5, ''), status),
 			folder_path = $6,
 			start_date = $7,
 			end_date = $8,
@@ -418,15 +487,26 @@ func (r *Repository) UpdateProject(ctx context.Context, id string, p domain.Proj
 		&p.ID, &p.CompanyID, &p.Code, &p.Name, &p.Status,
 		&p.FolderPath, &p.StartDate, &p.EndDate,
 	)
-	return p, err
+	return p, notFound(err)
 }
 
 func (r *Repository) DeleteProject(ctx context.Context, id string) error {
-	_, err := r.DB.Exec(ctx, `
+	return requireAffected(r.DB.Exec(ctx, `
 		UPDATE projects
 		SET deleted_at = NOW(), updated_at = NOW()
-		WHERE id = $1`, id)
-	return err
+		WHERE id = $1 AND deleted_at IS NULL`, id))
+}
+
+// PermissionTargets returns the status of the (non-deleted) user, or nil when it does not exist,
+// and whether the project exists and has not been deleted.
+func (r *Repository) PermissionTargets(ctx context.Context, userID, projectID string) (userStatus *string, projectExists bool, err error) {
+	err = r.DB.QueryRow(ctx, `
+		SELECT
+			(SELECT status FROM users WHERE id = $1 AND deleted_at IS NULL),
+			EXISTS(SELECT 1 FROM projects WHERE id = $2 AND deleted_at IS NULL)`,
+		userID, projectID,
+	).Scan(&userStatus, &projectExists)
+	return userStatus, projectExists, err
 }
 
 func (r *Repository) ListPermissions(ctx context.Context, userID, projectID string) ([]domain.Permission, error) {
@@ -473,6 +553,8 @@ func (r *Repository) ListPermissions(ctx context.Context, userID, projectID stri
 	return out, rows.Err()
 }
 
+// UpsertPermission relies on the NULLS NOT DISTINCT unique constraint (migration 00002), so a
+// project-wide permission (resource_id NULL) is updated in place instead of duplicated.
 func (r *Repository) UpsertPermission(ctx context.Context, p domain.Permission) (domain.Permission, error) {
 	err := r.DB.QueryRow(ctx, `
 		INSERT INTO permissions(user_id, project_id, resource_id, level)

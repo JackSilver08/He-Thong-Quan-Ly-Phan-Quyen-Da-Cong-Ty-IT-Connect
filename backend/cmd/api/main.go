@@ -15,9 +15,11 @@ import (
 	"github.com/it-connect/access-management/internal/auth"
 	"github.com/it-connect/access-management/internal/config"
 	"github.com/it-connect/access-management/internal/db"
+	"github.com/it-connect/access-management/internal/domain"
 	"github.com/it-connect/access-management/internal/handler"
 	"github.com/it-connect/access-management/internal/middleware"
 	"github.com/it-connect/access-management/internal/repository"
+	"github.com/it-connect/access-management/migrations"
 )
 
 func main() {
@@ -26,6 +28,7 @@ func main() {
 	pool, err := db.NewPool(ctx, cfg.DatabaseURL)
 	if err != nil { slog.Error("database connection failed", "error", err); os.Exit(1) }
 	defer pool.Close()
+	if err := db.Migrate(ctx, pool, migrations.FS); err != nil { slog.Error("database migration failed", "error", err); os.Exit(1) }
 	repo := repository.New(pool)
 	hash, err := auth.HashPassword(cfg.AdminPassword)
 	if err != nil { slog.Error("hash admin password", "error", err); os.Exit(1) }
@@ -50,29 +53,38 @@ func main() {
 	r.GET("/health", func(c *gin.Context) { c.JSON(200, gin.H{"status":"ok"}) })
 	api := r.Group("/api")
 	api.POST("/auth/login", h.Login)
-	protected := api.Group(""); protected.Use(middleware.JWT(cfg.JWTSecret))
+	protected := api.Group("")
+	protected.Use(middleware.JWT(cfg.JWTSecret), middleware.CurrentUser(repo))
 	protected.GET("/auth/me", h.Me)
-	protected.GET("/dashboard", h.Dashboard)
-	protected.GET("/companies", h.ListCompanies)
-	protected.POST("/companies", h.CreateCompany)
-	protected.PUT("/companies/:id", h.UpdateCompany)
-	protected.DELETE("/companies/:id", h.DeleteCompany)
-	protected.GET("/departments", h.ListDepartments)
-	protected.POST("/departments", h.CreateDepartment)
-	protected.PUT("/departments/:id", h.UpdateDepartment)
-	protected.DELETE("/departments/:id", h.DeleteDepartment)
-	protected.GET("/users", h.ListUsers)
-	protected.POST("/users", h.CreateUser)
-	protected.PUT("/users/:id", h.UpdateUser)
-	protected.DELETE("/users/:id", h.DeleteUser)
-	protected.POST("/users/:id/resign", h.ResignUser)
-	protected.GET("/projects", h.ListProjects)
-	protected.POST("/projects", h.CreateProject)
-	protected.PUT("/projects/:id", h.UpdateProject)
-	protected.DELETE("/projects/:id", h.DeleteProject)
-	protected.GET("/permissions", h.ListPermissions)
-	protected.POST("/permissions", h.SetPermission)
-	protected.GET("/audit-logs", h.ListAudit)
+
+	// Read access to the admin API: administrators and auditors.
+	read := protected.Group("")
+	read.Use(middleware.RequireRoles(domain.RoleSuperAdmin, domain.RoleAdmin, domain.RoleAuditor))
+	read.GET("/dashboard", h.Dashboard)
+	read.GET("/companies", h.ListCompanies)
+	read.GET("/departments", h.ListDepartments)
+	read.GET("/users", h.ListUsers)
+	read.GET("/projects", h.ListProjects)
+	read.GET("/permissions", h.ListPermissions)
+	read.GET("/audit-logs", h.ListAudit)
+
+	// Changes: administrators only. Super-admin-only rules for user accounts live in the handlers.
+	write := protected.Group("")
+	write.Use(middleware.RequireRoles(domain.RoleSuperAdmin, domain.RoleAdmin))
+	write.POST("/companies", h.CreateCompany)
+	write.PUT("/companies/:id", h.UpdateCompany)
+	write.DELETE("/companies/:id", h.DeleteCompany)
+	write.POST("/departments", h.CreateDepartment)
+	write.PUT("/departments/:id", h.UpdateDepartment)
+	write.DELETE("/departments/:id", h.DeleteDepartment)
+	write.POST("/users", h.CreateUser)
+	write.PUT("/users/:id", h.UpdateUser)
+	write.DELETE("/users/:id", h.DeleteUser)
+	write.POST("/users/:id/resign", h.ResignUser)
+	write.POST("/projects", h.CreateProject)
+	write.PUT("/projects/:id", h.UpdateProject)
+	write.DELETE("/projects/:id", h.DeleteProject)
+	write.POST("/permissions", h.SetPermission)
 
 	srv := &http.Server{Addr:":"+cfg.Port, Handler:r, ReadHeaderTimeout:10*time.Second, ReadTimeout:15*time.Second, WriteTimeout:30*time.Second, IdleTimeout:60*time.Second}
 	go func(){ slog.Info("API listening", "port", cfg.Port); if err:=srv.ListenAndServe(); err!=nil && !errors.Is(err,http.ErrServerClosed){ slog.Error("server stopped", "error", err); os.Exit(1) } }()

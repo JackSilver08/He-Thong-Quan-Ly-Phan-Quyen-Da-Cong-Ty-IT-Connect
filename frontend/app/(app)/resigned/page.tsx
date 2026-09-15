@@ -6,6 +6,7 @@ import { byId, formatDate, matches } from '@/lib/format';
 import { useList } from '@/lib/hooks';
 import { groupPermissions, hasAccess, revokeEntries, type PermissionEntry } from '@/lib/permissions';
 import type { Company, Permission, User } from '@/lib/types';
+import { useCanManage } from '@/components/AppShell';
 import { useConfirm } from '@/components/ui/Confirm';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { Badge, Card, EmptyState, PageHeader, Person } from '@/components/ui/Display';
@@ -18,6 +19,7 @@ export default function ResignedPage() {
   const toast = useToast();
   const confirm = useConfirm();
   const router = useRouter();
+  const canManage = useCanManage();
   const users = useList<User>('/users');
   const companies = useList<Company>('/companies');
   const permissions = useList<Permission>('/permissions');
@@ -129,7 +131,7 @@ export default function ResignedPage() {
           label={`Thao tác với ${u.full_name}`}
           items={[
             { label: 'Xem quyền truy cập', icon: 'shield', onSelect: () => router.push(`/permissions?user=${u.id}`) },
-            { label: 'Thu hồi toàn bộ quyền', icon: 'shield-off', danger: true, hidden: !accessByUser.has(u.id), onSelect: () => revokeAll(u) },
+            { label: 'Thu hồi toàn bộ quyền', icon: 'shield-off', danger: true, hidden: !canManage || !accessByUser.has(u.id), onSelect: () => revokeAll(u) },
           ]}
         />
       ),

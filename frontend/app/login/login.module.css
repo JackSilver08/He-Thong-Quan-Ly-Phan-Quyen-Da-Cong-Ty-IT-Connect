@@ -21,7 +21,7 @@
 .panel {
   position: relative;
   z-index: 1;
-  padding-block: calc(40 * var(--u)) calc(90 * var(--u));
+  padding-block: calc(40 * var(--u));
 }
 
 .form {
@@ -149,36 +149,6 @@
   opacity: 0.85;
 }
 
-.register {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  align-items: baseline;
-  column-gap: calc(26 * var(--u));
-  margin: calc(42 * var(--u)) 0 0;
-  font-size: calc(32 * var(--u));
-  line-height: 1.3;
-}
-.register > span {
-  color: var(--red);
-  font-style: italic;
-}
-.registerLink {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--blue);
-  font: inherit;
-  font-weight: 700;
-  cursor: pointer;
-}
-.registerLink:hover { text-decoration: underline; }
-.registerLink:focus-visible {
-  outline: 2px solid var(--blue);
-  outline-offset: 3px;
-  border-radius: 4px;
-}
-
 /* ---------- Nửa phải: nền đen cắt chéo + logo ---------- */
 .brand {
   position: absolute;
@@ -246,7 +216,6 @@
   .form { margin-left: 0; }
   .input { font-size: max(16px, calc(25 * var(--u))); }
   .button { font-size: max(16px, calc(26 * var(--u))); }
-  .register { font-size: max(15px, calc(28 * var(--u))); }
 }
 
 @media (prefers-reduced-motion: reduce) {

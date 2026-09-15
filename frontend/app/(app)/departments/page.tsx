@@ -4,6 +4,7 @@ import { api, errorMessage } from '@/lib/api';
 import { byId, matches } from '@/lib/format';
 import { useForm, useList } from '@/lib/hooks';
 import type { Company, Department, User } from '@/lib/types';
+import { useCanManage } from '@/components/AppShell';
 import { Button } from '@/components/ui/Button';
 import { useConfirm } from '@/components/ui/Confirm';
 import { DataTable, type Column } from '@/components/ui/DataTable';
@@ -18,6 +19,7 @@ import { FilterButton, ResultCount, SearchInput, Toolbar, type Chip } from '@/co
 export default function DepartmentsPage() {
   const toast = useToast();
   const confirm = useConfirm();
+  const canManage = useCanManage();
   const departments = useList<Department>('/departments');
   const companies = useList<Company>('/companies');
   const users = useList<User>('/users');
@@ -56,7 +58,7 @@ export default function DepartmentsPage() {
     }
   };
 
-  const columns: Column<Department>[] = [
+  const allColumns: Column<Department>[] = [
     { key: 'name', header: 'Phòng ban', sort: (d) => d.name, render: (d) => <strong className="cell-title">{d.name}</strong> },
     {
       key: 'company',
@@ -91,6 +93,7 @@ export default function DepartmentsPage() {
       ),
     },
   ];
+  const columns = canManage ? allColumns : allColumns.filter((column) => column.key !== 'actions');
 
   const openCreate = () => setModal({ open: true, department: null });
   const filtered = !!(query || companyId);
@@ -102,9 +105,11 @@ export default function DepartmentsPage() {
         title="Phòng ban"
         description="Cơ cấu phòng ban của từng công ty."
         actions={
-          <Button variant="primary" icon="plus" onClick={openCreate}>
-            Thêm phòng ban
-          </Button>
+          canManage && (
+            <Button variant="primary" icon="plus" onClick={openCreate}>
+              Thêm phòng ban
+            </Button>
+          )
         }
       />
       <Card>
@@ -141,9 +146,11 @@ export default function DepartmentsPage() {
                 title="Chưa có phòng ban"
                 description="Tạo phòng ban để sắp xếp nhân viên theo cơ cấu tổ chức."
                 action={
-                  <Button variant="primary" icon="plus" onClick={openCreate}>
-                    Thêm phòng ban
-                  </Button>
+                  canManage && (
+                    <Button variant="primary" icon="plus" onClick={openCreate}>
+                      Thêm phòng ban
+                    </Button>
+                  )
                 }
               />
             )
@@ -224,8 +231,8 @@ function DepartmentModal({ open, department, defaultCompanyId, companies, onClos
       }
     >
       <div className="form-grid form-grid-single">
-        <Field label="Công ty" required error={errors.company_id}>
-          <Select value={values.company_id} onChange={(e) => set('company_id', e.target.value)}>
+        <Field label="Công ty" required error={errors.company_id} hint={department ? 'Không thể chuyển phòng ban sang công ty khác.' : undefined}>
+          <Select value={values.company_id} disabled={!!department} onChange={(e) => set('company_id', e.target.value)}>
             <option value="">Chọn công ty</option>
             {companies.map((c) => (
               <option key={c.id} value={c.id}>

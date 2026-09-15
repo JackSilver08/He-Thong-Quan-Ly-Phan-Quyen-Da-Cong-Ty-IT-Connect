@@ -904,6 +904,15 @@ a {
   width: 55%;
   height: 34px;
 }
+.gate {
+  width: min(460px, calc(100vw - 32px));
+}
+.gate-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
 .skeleton-dark {
   width: 80%;
   background: linear-gradient(90deg, #22252b 0%, #2d3038 50%, #22252b 100%);
@@ -1875,6 +1884,12 @@ textarea.control {
 .matrix-cell:hover,
 .matrix-cell.is-open {
   background: var(--blue-soft);
+}
+.matrix-cell.is-readonly {
+  cursor: default;
+}
+.matrix-cell.is-readonly:hover {
+  background: none;
 }
 .matrix-cell:focus-visible {
   outline: 2px solid var(--blue);
