@@ -7,7 +7,7 @@ RUN --mount=type=cache,target=/root/.npm \
     && npm config set fetch-retry-mintimeout 30000 \
     && npm config set fetch-retry-maxtimeout 180000 \
     && npm config set fetch-timeout 600000 \
-    && npm ci
+    && npm install
 
 FROM node:22-alpine AS build
 WORKDIR /app
