@@ -15,7 +15,7 @@ import (
 	"github.com/it-connect/access-management/internal/repository"
 )
 
-// TenantResolver resolves the company that owns an identity or project.
+// TenantResolver resolves the company that owns an identity, project or department.
 type TenantResolver interface {
 	CompanyLookup
 	UserCompany(ctx context.Context, userID string) (string, error)
@@ -23,14 +23,13 @@ type TenantResolver interface {
 	DepartmentCompany(ctx context.Context, departmentID string) (string, error)
 }
 
-// WithTenantScope attaches an immutable server-derived company id to the request context.
+// WithTenantScope attaches the server-derived company id to the request context.
 func WithTenantScope(c *gin.Context, companyID string) {
 	c.Request = c.Request.WithContext(repository.WithTenantCompany(c.Request.Context(), companyID))
 }
 
 // TenantGuard prevents cross-company access. SUPER_ADMIN remains global.
-// For scoped list endpoints it overrides a caller-supplied company_id with the company
-// resolved from the authenticated identity, so the client cannot widen its visibility.
+// For scoped list endpoints it forces company_id to the company resolved from the authenticated identity.
 func TenantGuard(resolver TenantResolver) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		claims, ok := c.Get("claims")
@@ -51,7 +50,6 @@ func TenantGuard(resolver TenantResolver) gin.HandlerFunc {
 
 		path := c.FullPath()
 		method := c.Request.Method
-
 		if method == http.MethodGet {
 			switch path {
 			case "/api/users", "/api/projects", "/api/departments":
@@ -59,8 +57,6 @@ func TenantGuard(resolver TenantResolver) gin.HandlerFunc {
 				q.Set("company_id", cl.CompanyID)
 				c.Request.URL.RawQuery = q.Encode()
 			case "/api/companies", "/api/dashboard", "/api/audit-logs":
-				// These endpoints are globally aggregated in the current repository implementation.
-				// Deny them for scoped roles rather than risking cross-tenant disclosure.
 				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "endpoint requires super admin scope"})
 				return
 			case "/api/permissions":
@@ -72,7 +68,7 @@ func TenantGuard(resolver TenantResolver) gin.HandlerFunc {
 			return
 		}
 
-		if !checkMutationScope(c, resolver, cl.CompanyID, method, path) {
+		if !checkMutationScope(c, resolver, cl.CompanyID, path) {
 			return
 		}
 		c.Next()
@@ -87,19 +83,19 @@ func checkPermissionQuery(c *gin.Context, resolver TenantResolver, companyID str
 		return false
 	}
 	if userID != "" {
-		if !belongsToCompany(c, func() (string, error) { return resolver.UserCompany(c, userID) }, companyID) {
+		if !allowResolved(c, func() (string, error) { return resolver.UserCompany(c, userID) }, companyID) {
 			return false
 		}
 	}
 	if projectID != "" {
-		if !belongsToCompany(c, func() (string, error) { return resolver.ProjectCompany(c, projectID) }, companyID) {
+		if !allowResolved(c, func() (string, error) { return resolver.ProjectCompany(c, projectID) }, companyID) {
 			return false
 		}
 	}
 	return true
 }
 
-func checkMutationScope(c *gin.Context, resolver TenantResolver, companyID, method, path string) bool {
+func checkMutationScope(c *gin.Context, resolver TenantResolver, companyID, path string) bool {
 	if path == "/api/companies" || strings.HasPrefix(path, "/api/companies/") {
 		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "company administration requires super admin scope"})
 		return false
@@ -109,27 +105,21 @@ func checkMutationScope(c *gin.Context, resolver TenantResolver, companyID, meth
 	case path == "/api/departments":
 		body := readJSONBody(c)
 		id := strings.TrimSpace(stringValue(body["company_id"]))
-		if id == "" {
-			return true // let the handler return its normal validation error
-		}
-		return allowCompany(c, id, companyID)
+		return id == "" || allowCompany(c, id, companyID)
 	case strings.HasPrefix(path, "/api/departments/"):
-		return allowResolved(c, resolver, func() (string, error) { return resolver.DepartmentCompany(c, c.Param("id")) }, companyID)
+		return allowResolved(c, func() (string, error) { return resolver.DepartmentCompany(c, c.Param("id")) }, companyID)
 	case path == "/api/users":
 		body := readJSONBody(c)
 		id := strings.TrimSpace(stringValue(body["company_id"]))
-		if id == "" {
-			return true
-		}
-		return allowCompany(c, id, companyID)
+		return id == "" || allowCompany(c, id, companyID)
 	case strings.HasPrefix(path, "/api/users/"):
-		if !allowResolved(c, resolver, func() (string, error) { return resolver.UserCompany(c, c.Param("id")) }, companyID) {
+		if !allowResolved(c, func() (string, error) { return resolver.UserCompany(c, c.Param("id")) }, companyID) {
 			return false
 		}
 		if strings.HasSuffix(path, "/resign") {
 			body := readJSONBody(c)
 			replacement := strings.TrimSpace(stringValue(body["replacement_user_id"]))
-			if replacement != "" && !allowResolved(c, resolver, func() (string, error) { return resolver.UserCompany(c, replacement) }, companyID) {
+			if replacement != "" && !allowResolved(c, func() (string, error) { return resolver.UserCompany(c, replacement) }, companyID) {
 				return false
 			}
 		}
@@ -137,38 +127,27 @@ func checkMutationScope(c *gin.Context, resolver TenantResolver, companyID, meth
 	case path == "/api/projects":
 		body := readJSONBody(c)
 		id := strings.TrimSpace(stringValue(body["company_id"]))
-		if id == "" {
-			return true
-		}
-		return allowCompany(c, id, companyID)
+		return id == "" || allowCompany(c, id, companyID)
 	case strings.HasPrefix(path, "/api/projects/"):
-		return allowResolved(c, resolver, func() (string, error) { return resolver.ProjectCompany(c, c.Param("id")) }, companyID)
+		return allowResolved(c, func() (string, error) { return resolver.ProjectCompany(c, c.Param("id")) }, companyID)
 	case path == "/api/permissions":
 		body := readJSONBody(c)
 		userID := strings.TrimSpace(stringValue(body["user_id"]))
 		projectID := strings.TrimSpace(stringValue(body["project_id"]))
-		if userID != "" && !allowResolved(c, resolver, func() (string, error) { return resolver.UserCompany(c, userID) }, companyID) {
+		if userID != "" && !allowResolved(c, func() (string, error) { return resolver.UserCompany(c, userID) }, companyID) {
 			return false
 		}
-		if projectID != "" && !allowResolved(c, resolver, func() (string, error) { return resolver.ProjectCompany(c, projectID) }, companyID) {
+		if projectID != "" && !allowResolved(c, func() (string, error) { return resolver.ProjectCompany(c, projectID) }, companyID) {
 			return false
 		}
 		return true
 	default:
-		_ = method
 		return true
 	}
 }
 
-func allowResolved(c *gin.Context, resolver TenantResolver, resolve func() (string, error), companyID string) bool {
-	return allowCompanyResult(c, resolve(), companyID)
-}
-
-func belongsToCompany(c *gin.Context, resolve func() (string, error), companyID string) bool {
-	return allowCompanyResult(c, resolve(), companyID)
-}
-
-func allowCompanyResult(c *gin.Context, got string, err error, companyID string) bool {
+func allowResolved(c *gin.Context, resolve func() (string, error), companyID string) bool {
+	got, err := resolve()
 	if errors.Is(err, repository.ErrNotFound) {
 		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "resource not found"})
 		return false
@@ -194,6 +173,7 @@ func readJSONBody(c *gin.Context) map[string]any {
 	}
 	raw, err := io.ReadAll(io.LimitReader(c.Request.Body, 1<<20))
 	if err != nil {
+		c.Request.Body = io.NopCloser(bytes.NewReader(nil))
 		return map[string]any{}
 	}
 	c.Request.Body = io.NopCloser(bytes.NewReader(raw))
