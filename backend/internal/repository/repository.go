@@ -18,7 +18,7 @@ func New(db *pgxpool.Pool) *Repository { return &Repository{DB: db} }
 func (r *Repository) FindLoginUser(ctx context.Context, username string) (string, domain.User, error) {
 	var hash string
 	var u domain.User
-	err := r.DB.QueryRow(ctx, `SELECT u.id, u.employee_code, u.username, u.full_name, u.email, u.phone, u.company_id, u.department_id, d.name, c.name, u.role, u.status, u.password_hash FROM users u JOIN companies c ON c.id=u.company_id LEFT JOIN departments d ON d.id=u.department_id WHERE u.username=$1 AND u.deleted_at IS NULL`, username).
+	err := r.DB.QueryRow(ctx, `SELECT u.id, u.employee_code, u.username, u.full_name, COALESCE(u.email, ''), COALESCE(u.phone, ''), u.company_id, u.department_id, d.name, c.name, u.role, u.status, u.password_hash FROM users u JOIN companies c ON c.id=u.company_id LEFT JOIN departments d ON d.id=u.department_id WHERE u.username=$1 AND u.deleted_at IS NULL`, username).
 		Scan(&u.ID, &u.EmployeeCode, &u.Username, &u.FullName, &u.Email, &u.Phone, &u.CompanyID, &u.DepartmentID, &u.DepartmentName, &u.CompanyName, &u.Role, &u.Status, &hash)
 	return hash, u, err
 }
@@ -75,7 +75,7 @@ func (r *Repository) DeleteCompany(ctx context.Context, id string) error {
 }
 
 func (r *Repository) ListUsers(ctx context.Context, q, status, companyID, departmentID string) ([]domain.User, error) {
-	query := `SELECT u.id,u.employee_code,u.username,u.full_name,u.email,u.phone,u.company_id,u.department_id,d.name,c.name,u.role,u.status,u.joined_at,u.resigned_at,u.replacement_user_id FROM users u JOIN companies c ON c.id=u.company_id LEFT JOIN departments d ON d.id=u.department_id WHERE u.deleted_at IS NULL`
+	query := `SELECT u.id,u.employee_code,u.username,u.full_name,COALESCE(u.email, ''),COALESCE(u.phone, ''),u.company_id,u.department_id,d.name,c.name,u.role,u.status,u.joined_at,u.resigned_at,u.replacement_user_id FROM users u JOIN companies c ON c.id=u.company_id LEFT JOIN departments d ON d.id=u.department_id WHERE u.deleted_at IS NULL`
 	args := []any{}
 	n := 1
 	if q != "" {
