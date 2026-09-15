@@ -18,6 +18,7 @@ import (
 	"github.com/it-connect/access-management/internal/middleware"
 	"github.com/it-connect/access-management/internal/repository"
 	"github.com/it-connect/access-management/migrations"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func TestTenantIsolationThroughHTTPHandlers(t *testing.T) {
@@ -41,12 +42,7 @@ func TestTenantIsolationThroughHTTPHandlers(t *testing.T) {
 	userB := createTestUser(t, ctx, pool, companyB, "tenant-user-b", domain.RoleUser)
 	projectB := createTestProject(t, ctx, pool, companyB)
 
-	cfg := config.Config{
-		JWTSecret:         secret,
-		JWTExpiresHours:   1,
-		AdminUsername:     "admin",
-		AdminPassword:     "unused",
-	}
+	cfg := config.Config{JWTSecret: secret, JWTExpiresHours: 1, AdminUsername: "admin", AdminPassword: "unused"}
 	h := handler.New(repo, cfg)
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
@@ -62,7 +58,6 @@ func TestTenantIsolationThroughHTTPHandlers(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// A caller-controlled company_id must not widen visibility to another company.
 	req := httptest.NewRequest(http.MethodGet, "/api/users?company_id="+companyB, nil)
 	req.Header.Set("Authorization", "Bearer "+adminToken)
 	res := httptest.NewRecorder()
@@ -70,9 +65,7 @@ func TestTenantIsolationThroughHTTPHandlers(t *testing.T) {
 	if res.Code != http.StatusOK {
 		t.Fatalf("tenant user list status = %d, body=%s", res.Code, res.Body.String())
 	}
-	var payload struct {
-		Data []domain.User `json:"data"`
-	}
+	var payload struct{ Data []domain.User `json:"data"` }
 	if err := json.Unmarshal(res.Body.Bytes(), &payload); err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +78,6 @@ func TestTenantIsolationThroughHTTPHandlers(t *testing.T) {
 		t.Fatal("expected at least one company-A user in scoped list")
 	}
 
-	// A scoped administrator cannot mutate a user from another company.
 	req = httptest.NewRequest(http.MethodDelete, "/api/users/"+userB, nil)
 	req.Header.Set("Authorization", "Bearer "+adminToken)
 	res = httptest.NewRecorder()
@@ -94,7 +86,6 @@ func TestTenantIsolationThroughHTTPHandlers(t *testing.T) {
 		t.Fatalf("cross-company delete status = %d, body=%s", res.Code, res.Body.String())
 	}
 
-	// A permission request crossing tenants is rejected before the handler applies it.
 	body := `{"user_id":"` + userB + `","project_id":"` + projectB + `","level":"WRITE"}`
 	req = httptest.NewRequest(http.MethodPost, "/api/permissions", strings.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+adminToken)
@@ -105,7 +96,6 @@ func TestTenantIsolationThroughHTTPHandlers(t *testing.T) {
 		t.Fatalf("cross-company permission status = %d, body=%s", res.Code, res.Body.String())
 	}
 
-	// SUPER_ADMIN remains global and may inspect company B explicitly.
 	rootID := createTestUser(t, ctx, pool, companyA, "tenant-root", domain.RoleSuperAdmin)
 	rootToken, err := auth.IssueToken(secret, rootID, "tenant-root", domain.RoleSuperAdmin, 1)
 	if err != nil {
@@ -120,9 +110,7 @@ func TestTenantIsolationThroughHTTPHandlers(t *testing.T) {
 	}
 }
 
-func createTestCompany(t *testing.T, ctx context.Context, pool interface {
-	QueryRow(context.Context, string, ...any) interface{ Scan(...any) error }
-}, code string) string {
+func createTestCompany(t *testing.T, ctx context.Context, pool *pgxpool.Pool, code string) string {
 	t.Helper()
 	var id string
 	if err := pool.QueryRow(ctx, `INSERT INTO companies(code, name, description, status) VALUES($1, $2, '', 'ACTIVE') RETURNING id`, code, code+" Company").Scan(&id); err != nil {
@@ -131,9 +119,7 @@ func createTestCompany(t *testing.T, ctx context.Context, pool interface {
 	return id
 }
 
-func createTestUser(t *testing.T, ctx context.Context, pool interface {
-	QueryRow(context.Context, string, ...any) interface{ Scan(...any) error }
-}, companyID, username, role string) string {
+func createTestUser(t *testing.T, ctx context.Context, pool *pgxpool.Pool, companyID, username, role string) string {
 	t.Helper()
 	hash, err := auth.HashPassword("test-password")
 	if err != nil {
@@ -149,9 +135,7 @@ func createTestUser(t *testing.T, ctx context.Context, pool interface {
 	return id
 }
 
-func createTestProject(t *testing.T, ctx context.Context, pool interface {
-	QueryRow(context.Context, string, ...any) interface{ Scan(...any) error }
-}, companyID string) string {
+func createTestProject(t *testing.T, ctx context.Context, pool *pgxpool.Pool, companyID string) string {
 	t.Helper()
 	var id string
 	if err := pool.QueryRow(ctx, `
