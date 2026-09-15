@@ -18,6 +18,7 @@ type User struct {
 	JoinedAt       *time.Time `json:"joined_at,omitempty"`
 	ResignedAt     *time.Time `json:"resigned_at,omitempty"`
 	ReplacementID  *string    `json:"replacement_user_id,omitempty"`
+	Notes          string     `json:"notes,omitempty"`
 }
 
 type Company struct {
@@ -30,9 +31,9 @@ type Company struct {
 }
 
 type Department struct {
-	ID        string `json:"id"`
-	CompanyID string `json:"company_id"`
-	Name      string `json:"name"`
+	ID        string    `json:"id"`
+	CompanyID string    `json:"company_id"`
+	Name      string    `json:"name"`
 }
 
 type Project struct {
