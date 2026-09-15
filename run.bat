@@ -14,30 +14,25 @@ if not exist ".env" (
   echo Created .env from .env.example
 )
 
-REM Fast startup: reuse already-built images.
-REM Use: run.bat rebuild  only when source/Dockerfiles/dependencies changed.
-if /I "%~1"=="rebuild" goto rebuild
+REM Normal development startup rebuilds changed images automatically.
+REM Use: run.bat nobuild  to start existing images without rebuilding.
+if /I "%~1"=="nobuild" goto start_cached
 
-docker compose up -d
-if not errorlevel 1 goto wait
-
-echo Application images are not available. Building once...
-docker compose build
-if errorlevel 1 goto fail
-docker compose up -d
+echo Building changed images and starting containers...
+docker compose up -d --build
 if errorlevel 1 goto fail
 goto wait
 
-:rebuild
-echo Rebuilding application images...
-docker compose build
-if errorlevel 1 goto fail
+:start_cached
+echo Starting cached containers without rebuilding...
 docker compose up -d
 if errorlevel 1 goto fail
 
+goto wait
+
 :wait
-echo Waiting for application (max 60 seconds)...
-for /L %%i in (1,1,60) do (
+echo Waiting for application (max 90 seconds)...
+for /L %%i in (1,1,90) do (
   powershell -NoProfile -Command "try { $h=Invoke-WebRequest -Uri 'http://localhost:8080/health' -UseBasicParsing -TimeoutSec 2; $f=Invoke-WebRequest -Uri 'http://localhost:3000' -UseBasicParsing -TimeoutSec 2; if ($h.StatusCode -eq 200 -and $f.StatusCode -ge 200 -and $f.StatusCode -lt 500) { exit 0 } else { exit 1 } } catch { exit 1 }"
   if not errorlevel 1 goto ready
   timeout /t 1 /nobreak >nul
