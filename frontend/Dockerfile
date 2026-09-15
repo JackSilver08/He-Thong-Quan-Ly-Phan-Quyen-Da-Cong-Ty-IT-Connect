@@ -1,23 +1,27 @@
-FROM node:22-alpine
+FROM node:22-alpine AS deps
 WORKDIR /app
-ENV NODE_ENV=production \
-    NEXT_TELEMETRY_DISABLED=1
-
-# Copy package.json and install only production dependencies inside the
-# container (much smaller download than full dev deps).  The .next build
-# output is created on the host with "npm run build" beforehand.
 COPY package.json ./
-
 RUN --mount=type=cache,target=/root/.npm \
     npm config set fetch-retries 10 \
     && npm config set fetch-retry-factor 5 \
     && npm config set fetch-retry-mintimeout 30000 \
     && npm config set fetch-retry-maxtimeout 180000 \
     && npm config set fetch-timeout 600000 \
-    && npm install --omit=dev
+    && npm install
 
-# Copy pre-built Next.js output from the host.
-COPY .next ./.next
+FROM node:22-alpine AS build
+WORKDIR /app
+ENV NEXT_TELEMETRY_DISABLED=1
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+RUN npm run build
 
+FROM node:22-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1
+COPY --from=build /app/.next ./.next
+COPY --from=build /app/package.json ./package.json
+COPY --from=build /app/node_modules ./node_modules
 EXPOSE 3000
 CMD ["npm","start"]
