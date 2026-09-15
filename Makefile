@@ -1,4 +1,8 @@
-.PHONY: dev up down fmt test
+.PHONY: dev up down fmt test start
+
+# Khởi động toàn bộ hệ thống, build nếu cần.
+start:
+	docker compose up --build
 
 dev:
 	docker compose up --build
