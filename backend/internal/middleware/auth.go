@@ -35,8 +35,14 @@ type AccountLookup interface {
 	AccountState(ctx context.Context, userID string) (role, status string, err error)
 }
 
+// CompanyLookup optionally supplies the server-side company scope for tenant-aware handlers.
+type CompanyLookup interface {
+	AccountCompany(ctx context.Context, userID string) (string, error)
+}
+
 // CurrentUser reloads the caller's role and status on every request (after JWT), so a role change,
 // resignation or deletion takes effect immediately instead of when the token expires.
+// When the backing store implements CompanyLookup, the company_id claim is refreshed from the DB.
 func CurrentUser(accounts AccountLookup) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		claims := c.MustGet("claims").(*auth.Claims)
@@ -51,6 +57,20 @@ func CurrentUser(accounts AccountLookup) gin.HandlerFunc {
 			return
 		}
 		claims.Role = role
+
+		if lookup, ok := accounts.(CompanyLookup); ok {
+			companyID, err := lookup.AccountCompany(c, claims.UserID)
+			if errors.Is(err, repository.ErrNotFound) {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "account is no longer active"})
+				return
+			}
+			if err != nil {
+				slog.Error("load account company", "user_id", claims.UserID, "error", err)
+				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+				return
+			}
+			claims.CompanyID = companyID
+		}
 		c.Next()
 	}
 }
