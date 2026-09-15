@@ -2,8 +2,6 @@ package domain
 
 import "time"
 
-// Roles. SUPER_ADMIN and ADMIN manage data, AUDITOR has read-only access to the admin API,
-// USER accounts are managed employees without access to the admin API.
 const (
 	RoleSuperAdmin = "SUPER_ADMIN"
 	RoleAdmin      = "ADMIN"
@@ -11,7 +9,6 @@ const (
 	RoleUser       = "USER"
 )
 
-// User statuses.
 const (
 	StatusActive   = "ACTIVE"
 	StatusResigned = "RESIGNED"
@@ -47,6 +44,7 @@ type User struct {
 	CompanyName    string     `json:"company_name"`
 	Role           string     `json:"role"`
 	Status         string     `json:"status"`
+	AccountType    string     `json:"account_type"`
 	JoinedAt       *time.Time `json:"joined_at,omitempty"`
 	ResignedAt     *time.Time `json:"resigned_at,omitempty"`
 	ReplacementID  *string    `json:"replacement_user_id,omitempty"`
@@ -65,6 +63,7 @@ type Company struct {
 type Department struct {
 	ID        string `json:"id"`
 	CompanyID string `json:"company_id"`
+	Code      string `json:"code"`
 	Name      string `json:"name"`
 }
 
@@ -73,6 +72,7 @@ type Project struct {
 	CompanyID   string     `json:"company_id"`
 	Code        string     `json:"code"`
 	Name        string     `json:"name"`
+	Description string     `json:"description,omitempty"`
 	Status      string     `json:"status"`
 	FolderPath  string     `json:"folder_path,omitempty"`
 	StartDate   *time.Time `json:"start_date,omitempty"`
@@ -86,6 +86,7 @@ type Permission struct {
 	ProjectID    string  `json:"project_id"`
 	ResourceID   *string `json:"resource_id,omitempty"`
 	Level        string  `json:"level"`
+	Source       string  `json:"source,omitempty"`
 	UserName     string  `json:"user_name,omitempty"`
 	ProjectName  string  `json:"project_name,omitempty"`
 	ResourceName *string `json:"resource_name,omitempty"`
