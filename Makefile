@@ -1,8 +1,8 @@
 .PHONY: dev up down fmt test start
 
-# Khởi động toàn bộ hệ thống, build nếu cần.
+# One command: build/start all containers, wait for frontend, then open browser.
 start:
-	docker compose up --build
+	./run.sh
 
 dev:
 	docker compose up --build
