@@ -30,7 +30,7 @@ func Load() Config {
 		Env:             getenv("APP_ENV", "development"),
 		Port:            getenv("PORT", "8080"),
 		DatabaseURL:     getenv("DATABASE_URL", "postgres://itconnect:itconnect@localhost:5432/itconnect?sslmode=disable"),
-		JWTSecret:       getenv("JWT_SECRET", "development-secret"),
+		JWTSecret:       getenv("JWT_SECRET", "development-secret-change-me"),
 		JWTExpiresHours: hours,
 		CORSOrigins:     origins,
 		AdminUsername:   getenv("ADMIN_USERNAME", "admin"),
