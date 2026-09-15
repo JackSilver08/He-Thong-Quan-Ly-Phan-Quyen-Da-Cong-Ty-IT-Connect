@@ -1,24 +1,553 @@
 'use client';
-import {useEffect,useState} from 'react';
-import Layout from '@/components/Layout';
-import AuthGuard from '@/components/AuthGuard';
-import {api} from '@/lib/api';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { api, errorMessage } from '@/lib/api';
+import { byId, clearQuery, labelOf, matches, readQuery, ROLE_ORDER, ROLES, USER_STATUS } from '@/lib/format';
+import { useForm, useList } from '@/lib/hooks';
+import { groupPermissions, hasAccess, revokeEntries, type PermissionEntry } from '@/lib/permissions';
+import type { Company, Department, Permission, Project, User } from '@/lib/types';
+import { useMe } from '@/components/AppShell';
+import { Button } from '@/components/ui/Button';
+import { useConfirm } from '@/components/ui/Confirm';
+import { DataTable, type Column } from '@/components/ui/DataTable';
+import { Alert, Card, EmptyState, LabelBadge, PageHeader, Person } from '@/components/ui/Display';
+import { Checkbox, Combobox, Field, Input, Select, Textarea, type Option } from '@/components/ui/Form';
+import { Icon } from '@/components/ui/Icon';
+import { Modal } from '@/components/ui/Modal';
+import { RowMenu } from '@/components/ui/Popover';
+import { useToast } from '@/components/ui/Toast';
+import { FilterButton, ResultCount, SearchInput, Toolbar, type Chip } from '@/components/ui/Toolbar';
 
-type U={id:string;employee_code:string;full_name:string;username:string;email:string;phone?:string;company_id:string;company_name:string;department_id?:string;department_name?:string;role:string;status:string;notes?:string};
-type C={id:string;name:string}; type D={id:string;company_id:string;name:string};
-type Form={employee_code:string;username:string;full_name:string;email:string;phone:string;company_id:string;department_id:string;role:string;notes:string;password:string};
-const empty:Form={employee_code:'',username:'',full_name:'',email:'',phone:'',company_id:'',department_id:'',role:'USER',notes:'',password:''};
+type Filters = { status: string; companyId: string; departmentId: string };
+const noFilters: Filters = { status: '', companyId: '', departmentId: '' };
 
-export default function Users(){
- const [items,setItems]=useState<U[]>([]),[companies,setCompanies]=useState<C[]>([]),[departments,setDepartments]=useState<D[]>([]);const [q,setQ]=useState(''),[status,setStatus]=useState(''),[companyId,setCompanyId]=useState(''),[departmentId,setDepartmentId]=useState('');const [form,setForm]=useState<Form>(empty);const [editing,setEditing]=useState<string|null>(null);const [error,setError]=useState('');
- const load=async()=>{try{const qs=new URLSearchParams({q,status,company_id:companyId,department_id:departmentId});const x=await api<{data:U[]}>(`/users?${qs}`);setItems(x.data)}catch(e){setError((e as Error).message)}};
- useEffect(()=>{Promise.all([api<{data:C[]}>('/companies'),api<{data:U[]}>('/users?status=ACTIVE')]).then(([c])=>setCompanies(c.data)).catch(e=>setError(e.message));load()},[]);
- useEffect(()=>{if(companyId)api<{data:D[]}>(`/departments?company_id=${encodeURIComponent(companyId)}`).then(x=>setDepartments(x.data)).catch(e=>setError(e.message));else setDepartments([])},[companyId]);
- const submit=async()=>{setError('');try{if(editing){const body={...form,department_id:form.department_id||null};delete (body as any).password;await api(`/users/${editing}`,{method:'PUT',body:JSON.stringify(body)})}else{if(!form.password)return setError('Nhân viên mới bắt buộc có mật khẩu ban đầu.');await api('/users',{method:'POST',body:JSON.stringify({...form,department_id:form.department_id||null})})}setForm(empty);setEditing(null);await load()}catch(e){setError((e as Error).message)}};
- const beginEdit=(u:U)=>{setEditing(u.id);setForm({employee_code:u.employee_code,username:u.username,full_name:u.full_name,email:u.email,phone:u.phone||'',company_id:u.company_id,department_id:u.department_id||'',role:u.role,notes:u.notes||'',password:''})};
- const remove=async(id:string)=>{if(!confirm('Xóa mềm nhân viên này?'))return;try{await api(`/users/${id}`,{method:'DELETE'});await load()}catch(e){setError((e as Error).message)}};
- const resign=async(u:U)=>{const replacement=prompt('Nhập username của nhân viên thay thế (để trống nếu chưa có):','');if(replacement===null)return;const target=items.find(x=>x.username===replacement&&x.id!==u.id);if(replacement&&!target)return setError('Không tìm thấy nhân viên ACTIVE trong danh sách lọc hiện tại. Hãy dùng username chính xác hoặc để trống.');try{await api(`/users/${u.id}/resign`,{method:'POST',body:JSON.stringify({replacement_user_id:target?.id||null})});await load()}catch(e){setError((e as Error).message)}};
- return <AuthGuard><Layout><div className="topbar"><div><div className="title">Nhân viên</div><div className="subtitle">Quản lý nhân sự, tài khoản và vòng đời truy cập</div></div></div>{error&&<div className="error" style={{marginBottom:12}}>{error}</div>}<div className="card"><div className="toolbar"><input className="input" placeholder="Tìm tên, mã NV, username, email..." value={q} onChange={e=>setQ(e.target.value)}/><select className="select" value={status} onChange={e=>setStatus(e.target.value)}><option value="">Tất cả trạng thái</option><option value="ACTIVE">ACTIVE</option><option value="RESIGNED">RESIGNED</option><option value="DISABLED">DISABLED</option></select><select className="select" value={companyId} onChange={e=>{setCompanyId(e.target.value);setDepartmentId('');setForm(f=>({...f,company_id:e.target.value,department_id:''}))}}><option value="">Tất cả công ty</option>{companies.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select><select className="select" value={departmentId} onChange={e=>setDepartmentId(e.target.value)}><option value="">Tất cả phòng ban</option>{departments.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select><button className="button primary" onClick={load}>Tìm kiếm</button></div></div>
- <div className="card"><div className="toolbar"><input className="input" placeholder="Mã NV" value={form.employee_code} onChange={e=>setForm({...form,employee_code:e.target.value})}/><input className="input" placeholder="Username" value={form.username} onChange={e=>setForm({...form,username:e.target.value})}/><input className="input" placeholder="Họ tên" value={form.full_name} onChange={e=>setForm({...form,full_name:e.target.value})}/><input className="input" placeholder="Email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})}/><input className="input" placeholder="Số điện thoại" value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})}/><select className="select" value={form.company_id} onChange={e=>{setForm({...form,company_id:e.target.value,department_id:''});}}><option value="">Công ty</option>{companies.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select><select className="select" value={form.department_id} onChange={e=>setForm({...form,department_id:e.target.value})}><option value="">Phòng ban</option>{departments.filter(d=>!form.company_id||d.company_id===form.company_id).map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select><select className="select" value={form.role} onChange={e=>setForm({...form,role:e.target.value})}><option value="USER">USER</option><option value="ADMIN">ADMIN</option><option value="SUPER_ADMIN">SUPER_ADMIN</option><option value="AUDITOR">AUDITOR</option></select>{!editing&&<input className="input" type="password" placeholder="Mật khẩu ban đầu" value={form.password} onChange={e=>setForm({...form,password:e.target.value})}/>}<input className="input" placeholder="Ghi chú" value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})}/><button className="button primary" onClick={submit}>{editing?'Lưu nhân viên':'Thêm nhân viên'}</button>{editing&&<button className="button" onClick={()=>{setEditing(null);setForm(empty)}}>Hủy</button>}</div></div>
- <div className="table-wrap"><table className="table"><thead><tr><th>Mã NV</th><th>Họ tên</th><th>Username</th><th>Công ty</th><th>Phòng ban</th><th>Role</th><th>Status</th><th>Thao tác</th></tr></thead><tbody>{items.map(u=><tr key={u.id}><td>{u.employee_code}</td><td>{u.full_name}</td><td>{u.username}</td><td>{u.company_name}</td><td>{u.department_name||'—'}</td><td>{u.role}</td><td><span className={`badge ${u.status==='ACTIVE'?'green':u.status==='RESIGNED'?'red':'blue'}`}>{u.status}</span></td><td><button className="button" onClick={()=>beginEdit(u)}>Sửa</button>{' '} {u.status==='ACTIVE'&&<button className="button" onClick={()=>resign(u)}>Nghỉ việc</button>} {' '}<button className="button danger" onClick={()=>remove(u.id)}>Xóa</button></td></tr>)}</tbody></table>{!items.length&&<div className="empty">Không có nhân viên phù hợp.</div>}</div></Layout></AuthGuard>
+export default function UsersPage() {
+  const toast = useToast();
+  const confirm = useConfirm();
+  const router = useRouter();
+  const me = useMe();
+  const users = useList<User>('/users');
+  const companies = useList<Company>('/companies');
+  const departments = useList<Department>('/departments');
+  const projects = useList<Project>('/projects');
+  const permissions = useList<Permission>('/permissions');
+  const [query, setQuery] = useState('');
+  const [filters, setFilters] = useState<Filters>(noFilters);
+  const [editor, setEditor] = useState<{ open: boolean; user: User | null }>({ open: false, user: null });
+  const [resign, setResign] = useState<{ open: boolean; user: User | null }>({ open: false, user: null });
+
+  useEffect(() => {
+    if (readQuery('new')) setEditor({ open: true, user: null });
+    clearQuery();
+  }, []);
+
+  const companyById = useMemo(() => byId(companies.data), [companies.data]);
+  const departmentById = useMemo(() => byId(departments.data), [departments.data]);
+  const accessByUser = useMemo(() => {
+    const map = new Map<string, PermissionEntry[]>();
+    groupPermissions(permissions.data)
+      .filter(hasAccess)
+      .forEach((entry) => map.set(entry.user_id, [...(map.get(entry.user_id) ?? []), entry]));
+    return map;
+  }, [permissions.data]);
+
+  const rows = useMemo(
+    () =>
+      users.data.filter(
+        (u) =>
+          (!filters.status || u.status === filters.status) &&
+          (!filters.companyId || u.company_id === filters.companyId) &&
+          (!filters.departmentId || u.department_id === filters.departmentId) &&
+          matches(query, u.full_name, u.employee_code, u.username, u.email, u.phone),
+      ),
+    [users.data, filters, query],
+  );
+
+  const chips = [
+    filters.status && { key: 'status', label: labelOf(USER_STATUS, filters.status).label, onRemove: () => setFilters((f) => ({ ...f, status: '' })) },
+    filters.companyId && { key: 'company', label: companyById.get(filters.companyId)?.name ?? 'Công ty', onRemove: () => setFilters((f) => ({ ...f, companyId: '', departmentId: '' })) },
+    filters.departmentId && { key: 'department', label: departmentById.get(filters.departmentId)?.name ?? 'Phòng ban', onRemove: () => setFilters((f) => ({ ...f, departmentId: '' })) },
+  ].filter((chip): chip is Chip => !!chip);
+
+  const remove = async (user: User) => {
+    const ok = await confirm({
+      title: `Xoá nhân viên "${user.full_name}"?`,
+      description: 'Tài khoản sẽ bị vô hiệu hoá và ẩn khỏi danh sách. Lịch sử hoạt động vẫn được giữ lại.',
+      confirmText: 'Xoá nhân viên',
+    });
+    if (!ok) return;
+    try {
+      await api(`/users/${user.id}`, { method: 'DELETE' });
+      toast.success('Đã xoá nhân viên', user.full_name);
+      users.reload();
+    } catch (err) {
+      toast.error('Không xoá được nhân viên', errorMessage(err));
+    }
+  };
+
+  const columns: Column<User>[] = [
+    {
+      key: 'name',
+      header: 'Nhân viên',
+      sort: (u) => u.full_name,
+      render: (u) => <Person name={u.full_name} sub={`${u.employee_code} · ${u.username}`} />,
+    },
+    {
+      key: 'org',
+      header: 'Công ty / Phòng ban',
+      sort: (u) => `${u.company_name} ${u.department_name ?? ''}`,
+      render: (u) => (
+        <span className="cell-stack">
+          <span>{u.company_name}</span>
+          <span className="cell-sub">{u.department_name ?? 'Chưa có phòng ban'}</span>
+        </span>
+      ),
+    },
+    { key: 'role', header: 'Vai trò', sort: (u) => ROLE_ORDER.indexOf(u.role), render: (u) => <LabelBadge value={labelOf(ROLES, u.role)} /> },
+    {
+      key: 'access',
+      header: 'Quyền',
+      sort: (u) => accessByUser.get(u.id)?.length ?? 0,
+      render: (u) => {
+        const count = accessByUser.get(u.id)?.length ?? 0;
+        if (!count) return <span className="muted">—</span>;
+        return (
+          <Link className={`link${u.status !== 'ACTIVE' ? ' link-danger' : ''}`} href={`/permissions?user=${u.id}`}>
+            {count} dự án
+          </Link>
+        );
+      },
+    },
+    { key: 'status', header: 'Trạng thái', sort: (u) => u.status, render: (u) => <LabelBadge value={labelOf(USER_STATUS, u.status)} dot /> },
+    {
+      key: 'actions',
+      header: '',
+      width: 64,
+      className: 'col-actions',
+      render: (u) => {
+        const self = me?.id === u.id;
+        return (
+          <RowMenu
+            label={`Thao tác với ${u.full_name}`}
+            items={[
+              { label: 'Sửa thông tin', icon: 'pencil', onSelect: () => setEditor({ open: true, user: u }) },
+              { label: 'Xem quyền truy cập', icon: 'shield', onSelect: () => router.push(`/permissions?user=${u.id}`) },
+              { label: 'Cho nghỉ việc', icon: 'user-x', hidden: u.status !== 'ACTIVE' || self, onSelect: () => setResign({ open: true, user: u }) },
+              // Backend không cho xoá tài khoản "admin" (bỏ qua mà không báo lỗi), nên ẩn thao tác này.
+              { label: 'Xoá nhân viên', icon: 'trash', danger: true, hidden: u.username === 'admin' || self, onSelect: () => remove(u) },
+            ]}
+          />
+        );
+      },
+    },
+  ];
+
+  const openCreate = () => setEditor({ open: true, user: null });
+  const filtered = !!(query || chips.length);
+  const companyDepartments = departments.data.filter((d) => d.company_id === filters.companyId);
+
+  return (
+    <>
+      <PageHeader
+        eyebrow="Tổ chức"
+        title="Nhân viên"
+        description="Hồ sơ nhân sự, tài khoản đăng nhập và vòng đời truy cập."
+        actions={
+          <Button variant="primary" icon="user-plus" onClick={openCreate}>
+            Thêm nhân viên
+          </Button>
+        }
+      />
+      <Card>
+        <Toolbar>
+          <SearchInput value={query} onChange={setQuery} placeholder="Tìm tên, mã NV, tên đăng nhập, email..." />
+          <FilterButton chips={chips} onReset={() => setFilters(noFilters)}>
+            <Field label="Trạng thái">
+              <Select value={filters.status} onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}>
+                <option value="">Tất cả trạng thái</option>
+                {Object.entries(USER_STATUS).map(([value, item]) => (
+                  <option key={value} value={value}>
+                    {item.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Công ty">
+              <Select value={filters.companyId} onChange={(e) => setFilters((f) => ({ ...f, companyId: e.target.value, departmentId: '' }))}>
+                <option value="">Tất cả công ty</option>
+                {companies.data.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Phòng ban" hint={filters.companyId ? undefined : 'Chọn công ty trước'}>
+              <Select value={filters.departmentId} disabled={!filters.companyId} onChange={(e) => setFilters((f) => ({ ...f, departmentId: e.target.value }))}>
+                <option value="">Tất cả phòng ban</option>
+                {companyDepartments.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </FilterButton>
+          <span className="toolbar-spacer" />
+          <ResultCount count={rows.length} unit="nhân viên" />
+        </Toolbar>
+        <DataTable
+          columns={columns}
+          rows={rows}
+          rowKey={(u) => u.id}
+          loading={users.loading}
+          resetKey={`${query}|${JSON.stringify(filters)}`}
+          minWidth={860}
+          defaultSort={{ key: 'name', dir: 'asc' }}
+          empty={
+            filtered ? (
+              <EmptyState title="Không tìm thấy nhân viên" description="Thử đổi từ khoá hoặc bỏ bớt bộ lọc." />
+            ) : (
+              <EmptyState
+                icon="users"
+                title="Chưa có nhân viên"
+                description="Thêm nhân viên để cấp tài khoản và phân quyền truy cập dự án."
+                action={
+                  <Button variant="primary" icon="user-plus" onClick={openCreate}>
+                    Thêm nhân viên
+                  </Button>
+                }
+              />
+            )
+          }
+        />
+      </Card>
+
+      <UserModal
+        open={editor.open}
+        user={editor.user}
+        companies={companies.data}
+        departments={departments.data}
+        defaultCompanyId={filters.companyId}
+        onClose={() => setEditor((e) => ({ ...e, open: false }))}
+        onSaved={users.reload}
+      />
+      <ResignModal
+        open={resign.open}
+        user={resign.user}
+        users={users.data}
+        projects={projects.data}
+        entries={resign.user ? accessByUser.get(resign.user.id) ?? [] : []}
+        onClose={() => setResign((r) => ({ ...r, open: false }))}
+        onDone={() => {
+          users.reload();
+          permissions.reload();
+        }}
+      />
+    </>
+  );
+}
+
+type UserForm = {
+  full_name: string;
+  employee_code: string;
+  phone: string;
+  email: string;
+  company_id: string;
+  department_id: string;
+  username: string;
+  role: string;
+  password: string;
+  notes: string;
+};
+
+const emptyUser: UserForm = { full_name: '', employee_code: '', phone: '', email: '', company_id: '', department_id: '', username: '', role: 'USER', password: '', notes: '' };
+
+type UserModalProps = {
+  open: boolean;
+  user: User | null;
+  companies: Company[];
+  departments: Department[];
+  defaultCompanyId: string;
+  onClose: () => void;
+  onSaved: () => void;
+};
+
+function UserModal({ open, user, companies, departments, defaultCompanyId, onClose, onSaved }: UserModalProps) {
+  const toast = useToast();
+  const form = useForm<UserForm>(emptyUser);
+  const { values, set, errors, busy, reset } = form;
+
+  useEffect(() => {
+    if (!open) return;
+    reset(
+      user
+        ? {
+            full_name: user.full_name,
+            employee_code: user.employee_code,
+            phone: user.phone ?? '',
+            email: user.email ?? '',
+            company_id: user.company_id,
+            department_id: user.department_id ?? '',
+            username: user.username,
+            role: user.role,
+            password: '',
+            notes: user.notes ?? '',
+          }
+        : { ...emptyUser, company_id: defaultCompanyId },
+    );
+    // Chỉ khởi tạo lại khi mở popup (không theo dõi bộ lọc công ty đang chọn).
+  }, [open, user, reset]);
+
+  const companyDepartments = departments.filter((d) => d.company_id === values.company_id);
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    const username = values.username.trim();
+    const email = values.email.trim();
+    const valid = form.validate({
+      full_name: !values.full_name.trim() && 'Vui lòng nhập họ và tên',
+      employee_code: !values.employee_code.trim() && 'Vui lòng nhập mã nhân viên',
+      email: !!email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && 'Email không đúng định dạng',
+      company_id: !values.company_id && 'Vui lòng chọn công ty',
+      username: !username ? 'Vui lòng nhập tên đăng nhập' : /\s/.test(username) && username !== user?.username && 'Tên đăng nhập không được chứa khoảng trắng',
+      password: !user && (!values.password ? 'Vui lòng đặt mật khẩu ban đầu' : values.password.length < 8 && 'Mật khẩu cần tối thiểu 8 ký tự'),
+    });
+    if (!valid) return;
+    form.setBusy(true);
+    const payload = {
+      employee_code: values.employee_code.trim(),
+      username,
+      full_name: values.full_name.trim(),
+      email,
+      phone: values.phone.trim(),
+      company_id: values.company_id,
+      department_id: values.department_id || null,
+      role: values.role,
+      notes: values.notes.trim(),
+    };
+    try {
+      if (user) {
+        // API cập nhật đặt lại trạng thái thành ACTIVE nếu không gửi kèm: giữ nguyên trạng thái hiện tại.
+        await api(`/users/${user.id}`, { method: 'PUT', body: JSON.stringify({ ...payload, status: user.status }) });
+      } else {
+        await api('/users', { method: 'POST', body: JSON.stringify({ ...payload, password: values.password }) });
+      }
+      toast.success(user ? 'Đã cập nhật nhân viên' : 'Đã thêm nhân viên', payload.full_name);
+      onSaved();
+      onClose();
+    } catch (err) {
+      toast.error(user ? 'Không cập nhật được nhân viên' : 'Không thêm được nhân viên', errorMessage(err));
+    } finally {
+      form.setBusy(false);
+    }
+  };
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      busy={busy}
+      size="lg"
+      icon={<Icon name={user ? 'pencil' : 'user-plus'} size={22} />}
+      title={user ? 'Sửa thông tin nhân viên' : 'Thêm nhân viên mới'}
+      description={user ? `${user.full_name} · ${user.employee_code}` : 'Tạo hồ sơ nhân sự kèm tài khoản đăng nhập hệ thống.'}
+      onSubmit={submit}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={busy}>
+            Huỷ
+          </Button>
+          <Button variant="primary" type="submit" loading={busy}>
+            {user ? 'Lưu thay đổi' : 'Thêm nhân viên'}
+          </Button>
+        </>
+      }
+    >
+      <section className="form-section">
+        <h3 className="form-section-title">Thông tin nhân viên</h3>
+        <div className="form-grid">
+          <Field label="Họ và tên" required error={errors.full_name} wide>
+            <Input value={values.full_name} onChange={(e) => set('full_name', e.target.value)} placeholder="VD: Nguyễn Văn An" autoComplete="off" />
+          </Field>
+          <Field label="Mã nhân viên" required error={errors.employee_code}>
+            <Input value={values.employee_code} onChange={(e) => set('employee_code', e.target.value)} placeholder="VD: NV-0012" autoComplete="off" />
+          </Field>
+          <Field label="Số điện thoại">
+            <Input type="tel" value={values.phone} onChange={(e) => set('phone', e.target.value)} placeholder="VD: 0901 234 567" autoComplete="off" />
+          </Field>
+          <Field label="Email" error={errors.email} wide>
+            <Input type="email" value={values.email} onChange={(e) => set('email', e.target.value)} placeholder="ten@congty.vn" autoComplete="off" />
+          </Field>
+        </div>
+      </section>
+
+      <section className="form-section">
+        <h3 className="form-section-title">Tổ chức</h3>
+        <div className="form-grid">
+          <Field label="Công ty" required error={errors.company_id}>
+            <Select
+              value={values.company_id}
+              onChange={(e) => {
+                set('company_id', e.target.value);
+                set('department_id', '');
+              }}
+            >
+              <option value="">Chọn công ty</option>
+              {companies.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Phòng ban" hint={!values.company_id ? 'Chọn công ty trước' : !companyDepartments.length ? 'Công ty chưa có phòng ban nào' : undefined}>
+            <Select value={values.department_id} disabled={!values.company_id} onChange={(e) => set('department_id', e.target.value)}>
+              <option value="">Không thuộc phòng ban</option>
+              {companyDepartments.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        </div>
+      </section>
+
+      <section className="form-section">
+        <h3 className="form-section-title">Tài khoản đăng nhập</h3>
+        <div className="form-grid">
+          <Field label="Tên đăng nhập" required error={errors.username}>
+            <Input value={values.username} onChange={(e) => set('username', e.target.value)} placeholder="VD: an.nguyen" autoComplete="off" autoCapitalize="none" spellCheck={false} />
+          </Field>
+          <Field label="Vai trò">
+            <Select value={values.role} onChange={(e) => set('role', e.target.value)}>
+              {ROLE_ORDER.map((role) => (
+                <option key={role} value={role}>
+                  {ROLES[role].label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          {!user && (
+            <Field label="Mật khẩu ban đầu" required error={errors.password} hint="Tối thiểu 8 ký tự. Gửi cho nhân viên qua kênh an toàn." wide>
+              <Input type="password" value={values.password} onChange={(e) => set('password', e.target.value)} autoComplete="new-password" />
+            </Field>
+          )}
+          <Field label="Ghi chú" wide>
+            <Textarea value={values.notes} onChange={(e) => set('notes', e.target.value)} rows={2} placeholder="Thông tin bổ sung (không bắt buộc)" />
+          </Field>
+        </div>
+      </section>
+    </Modal>
+  );
+}
+
+type ResignModalProps = {
+  open: boolean;
+  user: User | null;
+  users: User[];
+  projects: Project[];
+  entries: PermissionEntry[];
+  onClose: () => void;
+  onDone: () => void;
+};
+
+function ResignModal({ open, user, users, projects, entries, onClose, onDone }: ResignModalProps) {
+  const toast = useToast();
+  const [replacement, setReplacement] = useState('');
+  const [note, setNote] = useState('');
+  const [revoke, setRevoke] = useState(true);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!open || !user) return;
+    setReplacement('');
+    // API ghi đè ghi chú hiện có bằng ghi chú nghỉ việc, nên điền sẵn để không mất nội dung cũ.
+    setNote(user.notes ?? '');
+    setRevoke(true);
+  }, [open, user]);
+
+  const options = useMemo<Option[]>(
+    () =>
+      users
+        .filter((u) => u.status === 'ACTIVE' && u.id !== user?.id)
+        .map((u) => ({ value: u.id, label: u.full_name, description: `${u.employee_code} · ${u.company_name}${u.department_name ? ` · ${u.department_name}` : ''}`, keywords: `${u.username} ${u.email}` })),
+    [users, user],
+  );
+
+  const projectCodes = useMemo(() => {
+    const codes = entries.map((e) => projects.find((p) => p.id === e.project_id)?.code ?? e.project_name);
+    return codes.length > 3 ? `${codes.slice(0, 3).join(', ')} và ${codes.length - 3} dự án khác` : codes.join(', ');
+  }, [entries, projects]);
+
+  if (!user) return null;
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    try {
+      await api(`/users/${user.id}/resign`, { method: 'POST', body: JSON.stringify({ replacement_user_id: replacement || null, note: note.trim() }) });
+    } catch (err) {
+      toast.error('Không cập nhật được trạng thái nghỉ việc', errorMessage(err));
+      setBusy(false);
+      return;
+    }
+    let revoked = 0;
+    if (revoke && entries.length) {
+      const result = await revokeEntries(entries);
+      revoked = result.done;
+      if (result.failed) toast.warning('Chưa thu hồi hết quyền', `${result.failed}/${entries.length} quyền chưa thu hồi được, hãy kiểm tra ở trang Phân quyền.`);
+    }
+    toast.success('Đã cho nghỉ việc', revoked ? `${user.full_name} · đã thu hồi ${revoked} quyền truy cập` : user.full_name);
+    setBusy(false);
+    onDone();
+    onClose();
+  };
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      busy={busy}
+      tone="red"
+      icon={<Icon name="user-x" size={22} />}
+      title="Cho nhân viên nghỉ việc"
+      description="Tài khoản chuyển sang trạng thái Đã nghỉ việc kể từ hôm nay."
+      onSubmit={submit}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={busy}>
+            Huỷ
+          </Button>
+          <Button variant="danger" type="submit" loading={busy}>
+            Xác nhận nghỉ việc
+          </Button>
+        </>
+      }
+    >
+      <div className="summary-card">
+        <Person name={user.full_name} sub={`${user.employee_code} · ${user.company_name}${user.department_name ? ` · ${user.department_name}` : ''}`} />
+        <LabelBadge value={labelOf(ROLES, user.role)} />
+      </div>
+      <div className="form-grid form-grid-single">
+        <Field label="Người thay thế" hint="Người tiếp nhận công việc, có thể để trống.">
+          <Combobox options={options} value={replacement} onChange={setReplacement} placeholder="Tìm theo tên, mã nhân viên..." clearable />
+        </Field>
+        <Field label="Ghi chú nghỉ việc" hint="Nội dung này sẽ thay cho ghi chú hiện tại của nhân viên.">
+          <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} placeholder="Lý do, bàn giao, thiết bị cần thu hồi..." />
+        </Field>
+        {entries.length ? (
+          <div className="revoke-box">
+            <Checkbox label={`Thu hồi ngay ${entries.length} quyền truy cập dự án`} checked={revoke} onChange={setRevoke} />
+            <p className="field-hint">{projectCodes}</p>
+            {!revoke && <Alert tone="warning">Nhân viên sẽ vẫn giữ quyền vào các dự án này sau khi nghỉ việc.</Alert>}
+          </div>
+        ) : (
+          <Alert>Nhân viên hiện không có quyền truy cập dự án nào.</Alert>
+        )}
+      </div>
+    </Modal>
+  );
 }
