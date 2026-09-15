@@ -7,8 +7,24 @@ on:
     branches: [main]
 
 jobs:
-  backend:
-    name: Backend Docker build
+  compose-build:
+    name: Full Docker Compose build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare environment file
+        run: cp .env.example .env
+
+      - name: Validate compose file
+        run: docker compose config
+
+      - name: Build all application images
+        run: docker compose build
+
+  smoke-check:
+    name: Backend build smoke check
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -16,13 +32,3 @@ jobs:
 
       - name: Build backend image
         run: docker build --pull -t it-connect-api-ci ./backend
-
-  compose:
-    name: Compose validation
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Validate compose file
-        run: docker compose config
