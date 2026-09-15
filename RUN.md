@@ -21,11 +21,27 @@ Hoặc double-click:
 run.bat
 ```
 
-Hai cách này sẽ:
+**Lần chạy đầu tiên có thể lâu** vì Docker phải tải base images và build frontend/backend/dashboard. Sau khi image đã được build, `run.ps1`/`run.bat` mặc định **không rebuild**, nên các lần khởi động sau sẽ nhanh hơn nhiều.
 
-1. Build và khởi động toàn bộ stack ở chế độ nền.
-2. Chờ frontend `http://localhost:3000` sẵn sàng.
-3. Tự mở trình duyệt mặc định vào IT Connect.
+Nếu bạn vừa thay đổi Dockerfile, `package.json`, `go.mod`, `requirements.txt` hoặc muốn ép build lại:
+
+```powershell
+.\run.ps1 -Rebuild
+```
+
+Hoặc:
+
+```text
+run.bat rebuild
+```
+
+Script sẽ:
+
+1. Tự tạo `.env` từ `.env.example` nếu chưa có.
+2. Tái sử dụng Docker images đã build khi có sẵn.
+3. Chỉ build khi image ứng dụng chưa tồn tại hoặc bạn chủ động yêu cầu rebuild.
+4. Chờ API health check và frontend sẵn sàng.
+5. Tự mở trình duyệt mặc định vào IT Connect.
 
 ## Linux/macOS
 
@@ -34,23 +50,27 @@ chmod +x run.sh
 ./run.sh
 ```
 
-Script sẽ build/start toàn bộ stack, chờ frontend sẵn sàng rồi mở trình duyệt nếu hệ điều hành hỗ trợ.
+Rebuild thủ công:
+
+```bash
+REBUILD=1 ./run.sh
+```
 
 ## Cách Docker trực tiếp
 
-Nếu không cần tự mở trình duyệt:
+Khởi động nhanh, sử dụng image hiện có:
 
 ```bash
-docker compose up --build
+docker compose up -d
 ```
 
-Lệnh này build và khởi động toàn bộ stack:
+Build lại toàn bộ:
 
-- PostgreSQL
-- Go/Gin API
-- Next.js frontend
-- Streamlit dashboard
-- Nginx
+```bash
+docker compose up -d --build
+```
+
+Lưu ý: không cần `docker pull` thủ công từng image. Docker Compose/BuildKit sẽ xử lý dependency và cache image.
 
 ## Địa chỉ dịch vụ
 
@@ -62,7 +82,7 @@ Lệnh này build và khởi động toàn bộ stack:
 
 ## Tạo file môi trường
 
-Lần đầu chạy, copy `.env.example` thành `.env`.
+Lần đầu chạy, launcher tự tạo `.env`. Nếu muốn chủ động tạo:
 
 Windows PowerShell:
 
@@ -91,10 +111,10 @@ Không sử dụng các giá trị mặc định này trong production.
 
 ## Điều khiển hệ thống
 
-Chạy nền:
+Khởi động nhanh:
 
 ```bash
-docker compose up -d --build
+docker compose up -d
 ```
 
 Dừng hệ thống:
@@ -115,6 +135,34 @@ Xem log:
 docker compose logs -f backend
 docker compose logs -f frontend
 docker compose logs -f postgres
+```
+
+## Troubleshooting build chậm hoặc timeout
+
+### Docker Hub timeout
+
+Không pre-pull tuần tự các image. Launcher hiện đã bỏ cơ chế này để tránh phải chờ từng image một.
+
+Kiểm tra Docker Desktop/network bằng:
+
+```powershell
+docker info
+docker pull node:22-alpine
+```
+
+Nếu `docker pull` cũng timeout, vấn đề nằm ở kết nối Docker Hub/DNS/proxy/VPN, không phải source code.
+
+### Build lại khi source thay đổi
+
+```powershell
+.\run.ps1 -Rebuild
+```
+
+### Kiểm tra trạng thái
+
+```bash
+docker compose ps
+docker compose logs --tail=100
 ```
 
 ## Luồng khởi động
@@ -177,7 +225,7 @@ Chỉ dùng trong development:
 
 ```bash
 docker compose down -v
-docker compose up --build
+docker compose up -d --build
 ```
 
 Lệnh `-v` sẽ xóa dữ liệu PostgreSQL của Docker.
