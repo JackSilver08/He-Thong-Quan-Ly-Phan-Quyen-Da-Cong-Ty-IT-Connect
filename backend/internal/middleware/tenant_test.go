@@ -2,9 +2,9 @@ package middleware
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -14,9 +14,9 @@ import (
 )
 
 type fakeTenantResolver struct {
-	companies    map[string]string
-	projects     map[string]string
-	departments  map[string]string
+	companies   map[string]string
+	projects    map[string]string
+	departments map[string]string
 }
 
 func (f fakeTenantResolver) AccountState(context.Context, string) (string, string, error) {
@@ -94,7 +94,10 @@ func TestTenantGuardForcesUserListToCallerCompany(t *testing.T) {
 
 func TestTenantGuardRejectsCrossCompanyPermissionBody(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	resolver := fakeTenantResolver{companies: map[string]string{"user-b": "company-b"}, projects: map[string]string{"project-a": "company-a"}}
+	resolver := fakeTenantResolver{
+		companies: map[string]string{"user-b": "company-b"},
+		projects:  map[string]string{"project-a": "company-a"},
+	}
 	hit := false
 	r := gin.New()
 	r.Use(func(c *gin.Context) {
@@ -104,7 +107,7 @@ func TestTenantGuardRejectsCrossCompanyPermissionBody(t *testing.T) {
 	r.Use(TenantGuard(resolver))
 	r.POST("/api/permissions", func(c *gin.Context) { hit = true; c.Status(http.StatusNoContent) })
 
-	req := httptest.NewRequest(http.MethodPost, "/api/permissions", stringsReader(`{"user_id":"user-b","project_id":"project-a","level":"READ"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/permissions", strings.NewReader(`{"user_id":"user-b","project_id":"project-a","level":"READ"}`))
 	req.Header.Set("Content-Type", "application/json")
 	res := httptest.NewRecorder()
 	r.ServeHTTP(res, req)
@@ -150,19 +153,4 @@ func TestTenantGuardMapsResolverErrors(t *testing.T) {
 	if res.Code != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d", res.Code)
 	}
-
-	_ = errors.New // keep errors available for future resolver error regression cases
 }
-
-func stringsReader(value string) *stringsReaderType {
-	return &stringsReaderType{value: value}
-}
-
-type stringsReaderType struct{ value string }
-func (r *stringsReaderType) Read(p []byte) (int, error) {
-	if r.value == "" { return 0, io.EOF }
-	n := copy(p, r.value)
-	r.value = r.value[n:]
-	return n, nil
-}
-func (r *stringsReaderType) Close() error { return nil }
