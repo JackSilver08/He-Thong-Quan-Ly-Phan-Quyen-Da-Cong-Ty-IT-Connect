@@ -1,5 +1,5 @@
 param(
-    [switch]$Rebuild
+    [switch]$NoBuild
 )
 
 $ErrorActionPreference = "Stop"
@@ -19,36 +19,27 @@ if (-not (Test-Path $envFile)) {
     Write-Host "Created .env from .env.example" -ForegroundColor Green
 }
 
-# Fast path: start existing images/containers without forcing a rebuild.
-# Use .\run.ps1 -Rebuild only when source dependencies or Dockerfiles changed.
-if ($Rebuild) {
-    Write-Host "Rebuild requested. Building application images..." -ForegroundColor Yellow
-    docker compose build
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "Docker build failed." -ForegroundColor Red
-        exit $LASTEXITCODE
-    }
+# Normal development startup rebuilds changed application images automatically.
+# Docker will reuse cached layers, so unchanged services remain fast.
+# Use .\run.ps1 -NoBuild only when you explicitly want to start existing images.
+if ($NoBuild) {
+    Write-Host "Starting cached containers without rebuilding..." -ForegroundColor Yellow
+    docker compose up -d
+} else {
+    Write-Host "Building changed images and starting containers..." -ForegroundColor Yellow
+    docker compose up -d --build
 }
 
-Write-Host "Starting containers..." -ForegroundColor Yellow
-docker compose up -d
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "Containers are not built yet or are invalid. Building once..." -ForegroundColor Yellow
-    docker compose build
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "Docker build failed. Check Docker Desktop/network and run: docker compose build" -ForegroundColor Red
-        exit $LASTEXITCODE
-    }
-    docker compose up -d
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "Docker Compose could not start the stack." -ForegroundColor Red
-        exit $LASTEXITCODE
-    }
+    Write-Host "Docker Compose failed to build or start the stack." -ForegroundColor Red
+    Write-Host "Run: docker compose ps" -ForegroundColor Yellow
+    Write-Host "Run: docker compose logs --tail=100" -ForegroundColor Yellow
+    exit $LASTEXITCODE
 }
 
 Write-Host "Waiting for application..." -ForegroundColor Yellow
 $ready = $false
-for ($i = 0; $i -lt 60; $i++) {
+for ($i = 0; $i -lt 90; $i++) {
     try {
         $health = Invoke-WebRequest -Uri "http://localhost:8080/health" -UseBasicParsing -TimeoutSec 2
         $frontend = Invoke-WebRequest -Uri "http://localhost:3000" -UseBasicParsing -TimeoutSec 2
@@ -63,7 +54,7 @@ for ($i = 0; $i -lt 60; $i++) {
 }
 
 if (-not $ready) {
-    Write-Host "Application did not become ready in 60 seconds." -ForegroundColor Red
+    Write-Host "Application did not become ready in 90 seconds." -ForegroundColor Red
     Write-Host "Run: docker compose ps" -ForegroundColor Yellow
     Write-Host "Run: docker compose logs --tail=100" -ForegroundColor Yellow
     exit 1
