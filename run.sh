@@ -15,20 +15,19 @@ if [[ ! -f .env ]]; then
   echo "Created .env from .env.example"
 fi
 
-# Fast path: reuse existing images. Set REBUILD=1 when Dockerfiles/dependencies changed.
-if [[ "${REBUILD:-0}" == "1" ]]; then
-  echo "Rebuilding application images..."
-  docker compose build
+# Normal development startup rebuilds changed application images automatically.
+# Docker reuses cached layers, so unchanged services stay fast.
+# Set NO_BUILD=1 when you explicitly want to start existing images only.
+if [[ "${NO_BUILD:-0}" == "1" ]]; then
+  echo "Starting cached containers without rebuilding..."
+  docker compose up -d
+else
+  echo "Building changed images and starting containers..."
+  docker compose up -d --build
 fi
 
-docker compose up -d || {
-  echo "Application images are not available. Building once..."
-  docker compose build
-  docker compose up -d
-}
-
-echo "Waiting for application (max 60 seconds)..."
-for _ in {1..60}; do
+echo "Waiting for application (max 90 seconds)..."
+for _ in {1..90}; do
   if curl -fsS http://localhost:8080/health >/dev/null 2>&1 && curl -fsS http://localhost:3000 >/dev/null 2>&1; then
     if command -v xdg-open >/dev/null 2>&1; then
       xdg-open http://localhost:3000 >/dev/null 2>&1 &
