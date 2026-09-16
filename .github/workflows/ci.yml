@@ -107,19 +107,43 @@ jobs:
         run: docker compose up -d
 
       - name: Wait for API
-        run: curl --fail --retry 30 --retry-delay 2 http://127.0.0.1:8080/health
+        run: |
+          for i in {1..60}; do
+            if curl -fsS http://127.0.0.1:8080/health >/dev/null; then
+              echo "API is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "API did not become ready"
+          docker compose ps
+          docker compose logs --tail=200 backend postgres
+          exit 1
 
       - name: Wait for frontend
-        run: curl --fail --retry 30 --retry-delay 2 http://127.0.0.1:3000/login
+        run: |
+          for i in {1..60}; do
+            if curl -fsS http://127.0.0.1:3000/login >/dev/null; then
+              echo "Frontend is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Frontend did not become ready"
+          docker compose ps
+          docker compose logs --tail=200 frontend backend
+          exit 1
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Install frontend test dependencies
         working-directory: frontend
-        run: npm install
+        run: npm ci
 
       - name: Install Chromium
         working-directory: frontend
@@ -129,9 +153,21 @@ jobs:
         working-directory: frontend
         env:
           CI: 'true'
+          BASE_URL: http://127.0.0.1:3000
           E2E_USERNAME: admin
           E2E_PASSWORD: Admin@123456
         run: npm run test:e2e
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Dump service logs on failure
         if: failure()
