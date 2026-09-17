@@ -1089,9 +1089,11 @@ a {
   overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 1;
+  line-clamp: 1;
 }
 .clamp-2 {
   -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 .badge {
   display: inline-flex;
@@ -1501,6 +1503,108 @@ textarea.control {
 }
 
 /* =========================================================================
+   Upload & Dropzone
+   ========================================================================= */
+.dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 2px dashed var(--line-strong);
+  border-radius: var(--radius);
+  padding: 26px 20px;
+  text-align: center;
+  background: var(--surface-2);
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease;
+  user-select: none;
+}
+.dropzone:hover,
+.dropzone.is-dragging {
+  border-color: var(--blue);
+  background: var(--blue-soft);
+}
+.dropzone-icon-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--blue);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 2px;
+  transition: transform 0.2s ease, color 0.2s ease;
+}
+.dropzone:hover .dropzone-icon-wrap,
+.dropzone.is-dragging .dropzone-icon-wrap {
+  transform: translateY(-2px);
+  color: var(--blue-hover);
+}
+.dropzone-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.dropzone-hint {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.file-selected-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--green-soft);
+  border: 1px solid rgba(15, 157, 88, 0.3);
+  border-radius: var(--radius);
+}
+.file-selected-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.file-selected-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  flex: none;
+  border-radius: 8px;
+  background: var(--green);
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+}
+.file-selected-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+}
+.file-selected-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 320px;
+}
+.file-selected-size {
+  font-size: 12px;
+  color: var(--green-ink);
+  font-weight: 500;
+}
+
+/* =========================================================================
    Popover, menu
    ========================================================================= */
 .popover {
@@ -1622,6 +1726,9 @@ textarea.control {
 }
 .modal-lg {
   max-width: 760px;
+}
+.modal-xl {
+  max-width: 960px;
 }
 .modal-header {
   display: flex;
@@ -1975,17 +2082,14 @@ textarea.control {
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
-.matrix-project-code {
+.matrix-col-title {
   display: block;
-  color: var(--ink);
-  font-weight: 800;
-}
-.matrix-project-name {
-  display: block;
-  max-width: 120px;
+  max-width: 140px;
   margin: 0 auto;
   overflow: hidden;
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2290,6 +2394,7 @@ textarea.control {
 .highlight-name {
   background: linear-gradient(135deg, #0d5cf6 0%, #2563eb 100%);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 .portal-subtitle {

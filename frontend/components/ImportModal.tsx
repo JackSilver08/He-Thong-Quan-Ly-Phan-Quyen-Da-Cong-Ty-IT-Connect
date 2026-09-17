@@ -3,7 +3,7 @@ import { useRef, useState, type FormEvent } from 'react';
 import { api, errorMessage } from '@/lib/api';
 import type { Company, ImportPreview } from '@/lib/types';
 import { Button } from './ui/Button';
-import { Alert, Card, EmptyState } from './ui/Display';
+import { Alert, Card } from './ui/Display';
 import { Field, Select } from './ui/Form';
 import { Icon } from './ui/Icon';
 import { Modal } from './ui/Modal';
@@ -25,6 +25,7 @@ export function ImportModal({ open, companies, defaultCompanyId, onClose, onSucc
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [loading, setLoading] = useState(false);
   const [committing, setCommitting] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -33,10 +34,10 @@ export function ImportModal({ open, companies, defaultCompanyId, onClose, onSucc
     }
   };
 
-  const uploadAndPreview = async (e: FormEvent) => {
-    e.preventDefault();
+  const uploadAndPreview = async (e?: FormEvent) => {
+    if (e) e.preventDefault();
     if (!file) {
-      toast.warning('Chưa chọn file', 'Vui lòng chọn một file Excel (.xlsx).');
+      toast.warning('Chưa chọn file', 'Vui lòng chọn một file Excel (.xlsx, .xls).');
       return;
     }
     setLoading(true);
@@ -95,6 +96,7 @@ export function ImportModal({ open, companies, defaultCompanyId, onClose, onSucc
   const resetAll = () => {
     setFile(null);
     setPreview(null);
+    setIsDragging(false);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -105,14 +107,19 @@ export function ImportModal({ open, companies, defaultCompanyId, onClose, onSucc
         resetAll();
         onClose();
       }}
-      size="xl"
-      icon={<Icon name="upload" size={22} />}
+      size={preview ? 'xl' : 'md'}
+      icon={<Icon name="upload" size={20} />}
       title="Nhập dữ liệu từ Excel (Import)"
-      description="Hỗ trợ file ma trận Sonacons File Server (Sonacons_Fileserver_DSPC.xlsx) hoặc danh sách chuẩn."
+      description={
+        preview
+          ? 'Kiểm tra kỹ thông tin phân tích trước khi lưu vào cơ sở dữ liệu.'
+          : 'Hỗ trợ file ma trận Sonacons File Server hoặc danh sách chuẩn.'
+      }
+      onSubmit={!preview ? uploadAndPreview : undefined}
       footer={
         preview ? (
           <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
-            <Button variant="secondary" onClick={resetAll} disabled={committing}>
+            <Button variant="secondary" icon="refresh-cw" onClick={resetAll} disabled={committing}>
               Chọn file khác
             </Button>
             <div style={{ display: 'flex', gap: '8px' }}>
@@ -125,61 +132,108 @@ export function ImportModal({ open, companies, defaultCompanyId, onClose, onSucc
             </div>
           </div>
         ) : (
-          <Button variant="secondary" onClick={onClose} disabled={loading}>
-            Đóng
-          </Button>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', width: '100%', gap: '8px' }}>
+            <Button variant="secondary" onClick={onClose} disabled={loading}>
+              Đóng
+            </Button>
+            <Button variant="primary" type="submit" icon="file-text" loading={loading} disabled={!file}>
+              Tải lên và xem trước
+            </Button>
+          </div>
         )
       }
     >
       {!preview ? (
-        <form onSubmit={uploadAndPreview}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '16px' }}>
-            <Field label="Công ty tiếp nhận dữ liệu" required>
-              <Select value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
-                {companies.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} ({c.code})
-                  </option>
-                ))}
-              </Select>
-            </Field>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <Field label="Công ty tiếp nhận dữ liệu" required>
+            <Select value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
+              {companies.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} ({c.code})
+                </option>
+              ))}
+            </Select>
+          </Field>
 
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx, .xls"
+            style={{ display: 'none' }}
+            onChange={handleFileChange}
+          />
+
+          {!file ? (
             <div
-              style={{
-                border: '2px dashed var(--border)',
-                borderRadius: '12px',
-                padding: '36px 20px',
-                textAlign: 'center',
-                background: 'var(--bg-subtle)',
-                cursor: 'pointer',
-              }}
+              className={`dropzone${isDragging ? ' is-dragging' : ''}`}
               onClick={() => fileInputRef.current?.click()}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setIsDragging(true);
+              }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setIsDragging(false);
+                if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                  setFile(e.dataTransfer.files[0]);
+                  setPreview(null);
+                }
+              }}
             >
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".xlsx, .xls"
-                style={{ display: 'none' }}
-                onChange={handleFileChange}
-              />
-              <div style={{ color: 'var(--primary)', marginBottom: '8px' }}>
-                <Icon name="upload" size={36} />
+              <div className="dropzone-icon-wrap">
+                <Icon name="upload" size={22} />
               </div>
-              <strong style={{ display: 'block', fontSize: '15px', marginBottom: '4px' }}>
-                {file ? file.name : 'Bấm để chọn file Excel hoặc kéo thả vào đây'}
-              </strong>
-              <span className="muted" style={{ fontSize: '13px' }}>
-                {file ? `${(file.size / 1024).toFixed(1)} KB` : 'Định dạng hỗ trợ: .xlsx, .xls'}
-              </span>
+              <div className="dropzone-title">Bấm để chọn file Excel hoặc kéo thả vào đây</div>
+              <div className="dropzone-hint">Định dạng hỗ trợ: .xlsx, .xls (Tối đa 20MB)</div>
             </div>
+          ) : (
+            <div className="file-selected-card">
+              <div className="file-selected-info">
+                <div className="file-selected-badge">XLS</div>
+                <div className="file-selected-text">
+                  <span className="file-selected-name" title={file.name}>{file.name}</span>
+                  <span className="file-selected-size">{(file.size / 1024).toFixed(1)} KB · Sẵn sàng tải lên</span>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  Đổi file
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  icon="x"
+                  aria-label="Xóa file đã chọn"
+                  onClick={resetAll}
+                />
+              </div>
+            </div>
+          )}
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px' }}>
-              <Button variant="primary" type="submit" icon="file-text" loading={loading} disabled={!file}>
-                Tải lên và xem trước (Preview)
-              </Button>
-            </div>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '10px 12px',
+              background: 'var(--blue-soft)',
+              borderRadius: '8px',
+              color: 'var(--blue-ink)',
+              fontSize: '12.5px',
+              lineHeight: 1.4,
+            }}
+          >
+            <Icon name="info" size={16} />
+            <span>Tương thích file ma trận phân quyền Sonacons và mẫu import nhân sự chuẩn.</span>
           </div>
-        </form>
+        </div>
       ) : (
         <div>
           {/* Summary KPI Badges */}

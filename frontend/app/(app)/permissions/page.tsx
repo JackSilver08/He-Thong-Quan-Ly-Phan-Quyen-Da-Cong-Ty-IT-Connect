@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { api, errorMessage } from '@/lib/api';
-import { byId, clearQuery, labelOf, LEVELS, LEVEL_ORDER, matches, readQuery, USER_STATUS } from '@/lib/format';
+import { byId, clearQuery, fixVietnameseEncoding, labelOf, LEVELS, LEVEL_ORDER, matches, readQuery, USER_STATUS } from '@/lib/format';
 import { useForm, useList } from '@/lib/hooks';
 import { entryKey, groupPermissions, hasAccess, type PermissionEntry } from '@/lib/permissions';
 import type { Company, Permission, Project, Resource, User } from '@/lib/types';
@@ -56,10 +56,10 @@ export default function PermissionsPage() {
   const entries = useMemo(() => groupPermissions(permissions.data), [permissions.data]);
   const conflictCount = entries.filter((e) => e.conflict).length;
 
-  const userName = (e: PermissionEntry) => userById.get(e.user_id)?.full_name ?? e.user_name;
+  const userName = (e: PermissionEntry) => fixVietnameseEncoding(userById.get(e.user_id)?.full_name ?? e.user_name);
   const projectLabel = (e: PermissionEntry) => {
     const project = projectById.get(e.project_id);
-    return project ? `${project.code} · ${project.name}` : e.project_name;
+    return fixVietnameseEncoding(project ? `${project.code} · ${project.name}` : e.project_name);
   };
 
   const rows = useMemo(
@@ -77,11 +77,11 @@ export default function PermissionsPage() {
   );
 
   const userOptions = useMemo<Option[]>(
-    () => users.data.map((u) => ({ value: u.id, label: u.full_name, description: `${u.employee_code} · ${u.company_name}`, keywords: `${u.username} ${u.email}` })),
+    () => users.data.map((u) => ({ value: u.id, label: fixVietnameseEncoding(u.full_name), description: `${u.employee_code} · ${u.company_name}`, keywords: `${u.username} ${u.email}` })),
     [users.data],
   );
   const projectOptions = useMemo<Option[]>(
-    () => projects.data.map((p) => ({ value: p.id, label: `${p.code} · ${p.name}`, description: p.company_name })),
+    () => projects.data.map((p) => ({ value: p.id, label: fixVietnameseEncoding(`${p.code} · ${p.name}`), description: p.company_name })),
     [projects.data],
   );
 
@@ -337,6 +337,7 @@ function PermissionMatrix({ users, projects, companies, entries, loading, readOn
   const [picker, setPicker] = useState<{ user: User; project: Project } | null>(null);
   const [saving, setSaving] = useState(false);
   const anchorRef = useRef<HTMLElement | null>(null);
+  const tableScrollRef = useRef<HTMLDivElement>(null);
 
   const activeCompany = companyId || companies[0]?.id || '';
   const columns = useMemo(() => projects.filter((p) => p.company_id === activeCompany).sort((a, b) => a.code.localeCompare(b.code, 'vi', { numeric: true })), [projects, activeCompany]);
@@ -355,6 +356,28 @@ function PermissionMatrix({ users, projects, companies, entries, loading, readOn
       })
       .sort((a, b) => a.full_name.localeCompare(b.full_name, 'vi'));
   }, [users, entries, columns, activeCompany, onlyWithAccess, query]);
+
+  // Cho phép lăn chuột dọc bên trong bảng sẽ tự động cuộn ngang trái/phải
+  useEffect(() => {
+    const el = tableScrollRef.current;
+    if (!el) return;
+
+    const onWheel = (e: WheelEvent) => {
+      if (el.scrollWidth > el.clientWidth && e.deltaY !== 0) {
+        const maxScroll = el.scrollWidth - el.clientWidth;
+        const atLeft = el.scrollLeft <= 0 && e.deltaY < 0;
+        const atRight = el.scrollLeft >= maxScroll - 2 && e.deltaY > 0;
+
+        if (!atLeft && !atRight) {
+          e.preventDefault();
+          el.scrollLeft += e.deltaY;
+        }
+      }
+    };
+
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [columns.length, rows.length]);
 
   const current = picker ? entryMap.get(entryKey(picker.user.id, picker.project.id)) : undefined;
 
@@ -391,17 +414,22 @@ function PermissionMatrix({ users, projects, companies, entries, loading, readOn
       ) : !rows.length ? (
         <EmptyState title="Không có nhân viên phù hợp" description="Thử đổi từ khoá hoặc bỏ tuỳ chọn lọc." />
       ) : (
-        <div className="table-scroll">
+        <div className="table-scroll" ref={tableScrollRef}>
           <table className="matrix">
             <thead>
               <tr>
                 <th className="matrix-user">Nhân viên</th>
-                {columns.map((p) => (
-                  <th key={p.id} title={p.name}>
-                    <span className="matrix-project-code">{p.code}</span>
-                    <span className="matrix-project-name">{p.name}</span>
-                  </th>
-                ))}
+                {columns.map((p) => {
+                  const pCode = fixVietnameseEncoding(p.code);
+                  const pName = fixVietnameseEncoding(p.name);
+                  const title = pName || pCode;
+                  const tooltip = pCode && pName && pCode !== pName ? `${pCode} · ${pName}` : title;
+                  return (
+                    <th key={p.id} title={tooltip}>
+                      <span className="matrix-col-title">{title}</span>
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
@@ -409,7 +437,7 @@ function PermissionMatrix({ users, projects, companies, entries, loading, readOn
                 <tr key={u.id}>
                   <th scope="row" className="matrix-user">
                     <Person
-                      name={u.full_name}
+                      name={fixVietnameseEncoding(u.full_name)}
                       size="sm"
                       sub={u.status === 'ACTIVE' ? u.employee_code : labelOf(USER_STATUS, u.status).label}
                     />
@@ -420,14 +448,14 @@ function PermissionMatrix({ users, projects, companies, entries, loading, readOn
                     return (
                       <td key={p.id}>
                         {readOnly ? (
-                          <span className="matrix-cell is-readonly" title={label} aria-label={`${u.full_name}, ${p.code}: ${label}`}>
+                          <span className="matrix-cell is-readonly" title={label} aria-label={`${fixVietnameseEncoding(u.full_name)}, ${fixVietnameseEncoding(p.code)}: ${label}`}>
                             <LevelLetter level={entry?.level} conflict={entry?.conflict} />
                           </span>
                         ) : (
                           <button
                             type="button"
                             className={`matrix-cell${picker?.user.id === u.id && picker.project.id === p.id ? ' is-open' : ''}`}
-                            aria-label={`${u.full_name}, ${p.code}: ${label}. Bấm để đổi.`}
+                            aria-label={`${fixVietnameseEncoding(u.full_name)}, ${fixVietnameseEncoding(p.code)}: ${label}. Bấm để đổi.`}
                             title={label}
                             onClick={(event) => {
                               anchorRef.current = event.currentTarget;

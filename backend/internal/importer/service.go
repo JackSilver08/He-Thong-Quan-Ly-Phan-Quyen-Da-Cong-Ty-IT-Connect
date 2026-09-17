@@ -102,7 +102,7 @@ func ParseAndPreviewExcel(r io.Reader) (*ImportPreview, error) {
 	projectCols := make(map[int]string) // colIdx -> project/folder name
 
 	for cIdx, h := range headers {
-		cleanHeader := strings.TrimSpace(h)
+		cleanHeader := legacyimport.FixVietnameseEncoding(strings.TrimSpace(h))
 		lower := strings.ToLower(cleanHeader)
 		if strings.Contains(lower, "mã nv") || strings.Contains(lower, "manv") || strings.Contains(lower, "mã") {
 			colMap["code"] = cIdx
@@ -122,6 +122,9 @@ func ParseAndPreviewExcel(r io.Reader) (*ImportPreview, error) {
 			colMap["role"] = cIdx
 		} else if strings.Contains(lower, "ghi chú") || strings.Contains(lower, "note") {
 			colMap["notes"] = cIdx
+		} else if lower == "ký hiệu" || lower == "mô tả" || lower == "quyền truy cập" || lower == "quyền" || lower == "stt" || lower == "pass" || lower == "password" || lower == "mật khẩu" {
+			// Bỏ qua các cột metadata không phải thư mục dự án
+			continue
 		} else if cIdx > 3 && cleanHeader != "" {
 			// Could be a project or folder column (like in Sonacons sheet)
 			projectCols[cIdx] = cleanHeader
@@ -146,7 +149,7 @@ func ParseAndPreviewExcel(r io.Reader) (*ImportPreview, error) {
 			return strings.TrimSpace(row[idx])
 		}
 
-		fullName := getVal("name")
+		fullName := legacyimport.FixVietnameseEncoding(getVal("name"))
 		if fullName == "" {
 			continue // skip empty rows
 		}
@@ -176,7 +179,7 @@ func ParseAndPreviewExcel(r io.Reader) (*ImportPreview, error) {
 			}
 		}
 
-		dept := getVal("department")
+		dept := legacyimport.FixVietnameseEncoding(getVal("department"))
 		if dept != "" {
 			deptSet[dept] = struct{}{}
 		}
