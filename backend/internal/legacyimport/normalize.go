@@ -209,3 +209,21 @@ var nonAlnumRe = regexp.MustCompile(`[^a-z0-9]+`)
 func slugCode(name string) string {
 	return strings.ToUpper(strings.Trim(nonAlnumRe.ReplaceAllString(fold(name), "-"), "-"))
 }
+
+func CleanNameDevice(raw string) (name, device string) {
+	return splitNameDevice(raw)
+}
+
+func ParseJoinedNote(raw string) (*time.Time, string, error) {
+	return parseNote(raw)
+}
+
+func ParseLevel(raw string) (string, bool) {
+	level, status := parseLevel(raw)
+	return level, status == cellValid
+}
+
+func GenerateUsername(fullName string) string {
+	return emailKey(fullName)
+}
+

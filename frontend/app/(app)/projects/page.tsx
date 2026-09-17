@@ -7,7 +7,10 @@ import { labelOf, matches, RECORD_STATUS } from '@/lib/format';
 import { useForm, useList } from '@/lib/hooks';
 import { groupPermissions, hasAccess } from '@/lib/permissions';
 import type { Company, Permission, Project } from '@/lib/types';
+import { downloadExcel } from '@/lib/export';
 import { useCanManage } from '@/components/AppShell';
+import { FolderModal } from '@/components/FolderModal';
+import { ProjectMembersModal } from '@/components/ProjectMembersModal';
 import { Button } from '@/components/ui/Button';
 import { useConfirm } from '@/components/ui/Confirm';
 import { DataTable, type Column } from '@/components/ui/DataTable';
@@ -30,6 +33,9 @@ export default function ProjectsPage() {
   const [query, setQuery] = useState('');
   const [companyId, setCompanyId] = useState('');
   const [modal, setModal] = useState<{ open: boolean; project: Project | null }>({ open: false, project: null });
+  const [folderModal, setFolderModal] = useState<{ open: boolean; project: Project | null }>({ open: false, project: null });
+  const [memberModal, setMemberModal] = useState<{ open: boolean; project: Project | null }>({ open: false, project: null });
+  const [exporting, setExporting] = useState(false);
 
   const accessCount = useMemo(() => {
     const map = new Map<string, number>();
@@ -112,6 +118,8 @@ export default function ProjectsPage() {
         <RowMenu
           label={`Thao tác với ${p.name}`}
           items={[
+            { label: 'Thành viên ban dự án', icon: 'users', onSelect: () => setMemberModal({ open: true, project: p }) },
+            { label: 'Cây thư mục File Server', icon: 'folder', onSelect: () => setFolderModal({ open: true, project: p }) },
             { label: 'Sửa dự án', icon: 'pencil', hidden: !canManage, onSelect: () => setModal({ open: true, project: p }) },
             { label: 'Xem phân quyền', icon: 'shield', onSelect: () => router.push(`/permissions?project=${p.id}`) },
             { label: 'Xoá dự án', icon: 'trash', danger: true, hidden: !canManage, onSelect: () => remove(p) },
@@ -131,11 +139,31 @@ export default function ProjectsPage() {
         title="Dự án"
         description="Dự án gắn với công ty và thư mục trên File Server — đơn vị để cấp quyền truy cập."
         actions={
-          canManage && (
-            <Button variant="primary" icon="plus" onClick={openCreate}>
-              Thêm dự án
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <Button
+              variant="secondary"
+              icon="download"
+              loading={exporting}
+              onClick={async () => {
+                setExporting(true);
+                try {
+                  await downloadExcel('/export/projects', 'Danh_sach_du_an.xlsx');
+                  toast.success('Đã xuất file Excel thành công');
+                } catch (err) {
+                  toast.error('Không xuất được file', errorMessage(err));
+                } finally {
+                  setExporting(false);
+                }
+              }}
+            >
+              Xuất Excel
             </Button>
-          )
+            {canManage && (
+              <Button variant="primary" icon="plus" onClick={openCreate}>
+                Thêm dự án
+              </Button>
+            )}
+          </div>
         }
       />
       <Card>
@@ -191,6 +219,18 @@ export default function ProjectsPage() {
         companies={companies.data}
         onClose={() => setModal((m) => ({ ...m, open: false }))}
         onSaved={projects.reload}
+      />
+      <ProjectMembersModal
+        open={memberModal.open}
+        project={memberModal.project}
+        onClose={() => setMemberModal({ open: false, project: null })}
+        onUpdated={projects.reload}
+      />
+      <FolderModal
+        open={folderModal.open}
+        project={folderModal.project}
+        onClose={() => setFolderModal({ open: false, project: null })}
+        onUpdated={projects.reload}
       />
     </>
   );

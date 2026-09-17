@@ -80,6 +80,7 @@ func main() {
 	protected := api.Group("")
 	protected.Use(middleware.JWT(cfg.JWTSecret), middleware.CurrentUser(repo), middleware.TenantGuard(repo))
 	protected.GET("/auth/me", h.Me)
+	protected.GET("/my/access", h.GetMyAccess)
 
 	// Read access to the admin API: administrators and auditors.
 	read := protected.Group("")
@@ -89,8 +90,14 @@ func main() {
 	read.GET("/departments", h.ListDepartments)
 	read.GET("/users", h.ListUsers)
 	read.GET("/projects", h.ListProjects)
+	read.GET("/projects/:id/resources", h.ListResources)
+	read.GET("/projects/:id/members", h.ListProjectMembers)
 	read.GET("/permissions", h.ListPermissions)
 	read.GET("/audit-logs", h.ListAudit)
+	read.GET("/export/users", h.ExportUsers)
+	read.GET("/export/projects", h.ExportProjects)
+	read.GET("/export/resigned", h.ExportResigned)
+	read.GET("/export/permissions", h.ExportPermissionMatrix)
 
 	// Changes: administrators only. Super-admin-only rules for user accounts live in the handlers.
 	write := protected.Group("")
@@ -108,7 +115,13 @@ func main() {
 	write.POST("/projects", h.CreateProject)
 	write.PUT("/projects/:id", h.UpdateProject)
 	write.DELETE("/projects/:id", h.DeleteProject)
+	write.POST("/projects/:id/resources", h.CreateResource)
+	write.DELETE("/resources/:id", h.DeleteResource)
+	write.POST("/projects/:id/members", h.AddProjectMember)
+	write.DELETE("/projects/:id/members/:userId", h.RemoveProjectMember)
 	write.POST("/permissions", h.SetPermission)
+	write.POST("/import/preview", h.ImportPreview)
+	write.POST("/import/commit", h.ImportCommit)
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,

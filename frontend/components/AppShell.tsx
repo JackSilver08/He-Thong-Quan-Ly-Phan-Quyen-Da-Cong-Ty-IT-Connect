@@ -40,10 +40,13 @@ const NAV: Array<{ group?: string; items: NavItem[] }> = [
   },
 ];
 
+const USER_NAV: Array<{ group?: string; items: NavItem[] }> = [
+  { items: [{ href: '/my-access', label: 'Quyền truy cập của tôi', icon: 'shield' }] },
+];
+
 const isActive = (pathname: string, href: string) => (href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(`${href}/`));
 
-// Khớp với phân quyền của API: AUDITOR chỉ xem, USER không vào được trang quản trị.
-const PANEL_ROLES = ['SUPER_ADMIN', 'ADMIN', 'AUDITOR'];
+const PANEL_ROLES = ['SUPER_ADMIN', 'ADMIN', 'AUDITOR', 'USER'];
 const MANAGE_ROLES = ['SUPER_ADMIN', 'ADMIN'];
 
 const MeContext = createContext<User | null>(null);
@@ -78,7 +81,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const [loadError, setLoadError] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
 
-  const current = NAV.flatMap((group) => group.items).find((item) => isActive(pathname, item.href));
+  const navItems = me?.role === 'USER' ? USER_NAV : NAV;
+  const current = navItems.flatMap((group) => group.items).find((item) => isActive(pathname, item.href));
 
   const loadMe = useCallback(() => {
     setLoadError(false);
@@ -98,6 +102,12 @@ export default function AppShell({ children }: { children: ReactNode }) {
     setReady(true);
     loadMe();
   }, [router, loadMe]);
+
+  useEffect(() => {
+    if (me && me.role === 'USER' && pathname !== '/my-access') {
+      router.replace('/my-access');
+    }
+  }, [me, pathname, router]);
 
   useEffect(() => {
     setNavOpen(false);
@@ -147,7 +157,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
       <Gate
         icon="shield-off"
         title="Tài khoản không có quyền truy cập"
-        description={`Trang quản trị chỉ dành cho Quản trị viên và Kiểm soát viên. Tài khoản ${me.username} hiện là ${ROLES[me.role]?.label ?? me.role}.`}
+        description={`Tài khoản ${me.username} không có quyền sử dụng hệ thống.`}
       >
         <Button variant="primary" icon="log-out" onClick={logout}>
           Đăng xuất
@@ -156,15 +166,33 @@ export default function AppShell({ children }: { children: ReactNode }) {
     );
   }
 
+  // Chặn người dùng thường (USER) truy cập các trang quản trị, chuyển hướng an toàn về /my-access
+  if (me.role === 'USER' && pathname !== '/my-access') {
+    return (
+      <div className="boot" aria-busy="true">
+        <span className="spinner spinner-lg" />
+      </div>
+    );
+  }
+
   return (
     <MeContext.Provider value={me}>
       <div className="app">
         <aside className={`sidebar${navOpen ? ' is-open' : ''}`} aria-label="Điều hướng chính">
-          <Link href="/" className="brand" aria-label="IT Connect – Tổng quan">
-            <Image src={logo} alt="" sizes="240px" loading="eager" />
-          </Link>
+          <div className="brand-wrapper">
+            <Link href={me.role === 'USER' ? '/my-access' : '/'} className="brand-header" aria-label="IT Connect – Trang chủ">
+              <div className="brand-icon-box">
+                <Image src={logo} alt="IT Connect" width={32} height={32} priority className="brand-img" />
+              </div>
+              <div className="brand-meta">
+                <span className="brand-name">IT Connect</span>
+                <span className="brand-desc">Phân quyền File Server</span>
+              </div>
+              <span className="brand-tag">v2.5</span>
+            </Link>
+          </div>
           <nav className="nav">
-            {NAV.map((group, index) => (
+            {navItems.map((group, index) => (
               <div className="nav-group" key={group.group ?? index}>
                 {group.group && <p className="nav-group-label">{group.group}</p>}
                 {group.items.map((item) => {
@@ -180,13 +208,26 @@ export default function AppShell({ children }: { children: ReactNode }) {
             ))}
           </nav>
           <div className="sidebar-user">
-            <Avatar name={me.full_name} />
-            <div className="sidebar-user-info">
-              <strong title={me.full_name}>{me.full_name}</strong>
-              <span>{ROLES[me.role]?.label ?? me.role}</span>
+            <div className="sidebar-user-avatar-wrap">
+              <Avatar name={me.full_name} size="sm" />
+              <span className="status-dot-pulse" title="Trực tuyến" />
             </div>
-            <button type="button" className="icon-btn icon-btn-dark" aria-label="Đăng xuất" title="Đăng xuất" onClick={signOut}>
-              <Icon name="log-out" />
+            <div className="sidebar-user-info">
+              <strong className="sidebar-user-name" title={me.full_name}>{me.full_name}</strong>
+              <div className="sidebar-user-meta">
+                <span className="role-tag" title={ROLES[me.role]?.label ?? me.role}>
+                  {ROLES[me.role]?.label ?? me.role}
+                </span>
+                {me.employee_code && (
+                  <>
+                    <span className="meta-dot" aria-hidden="true">•</span>
+                    <span className="emp-tag" title={`Mã NV: ${me.employee_code}`}>{me.employee_code}</span>
+                  </>
+                )}
+              </div>
+            </div>
+            <button type="button" className="icon-btn icon-btn-dark sidebar-logout" aria-label="Đăng xuất" title="Đăng xuất" onClick={signOut}>
+              <Icon name="log-out" size={16} />
             </button>
           </div>
         </aside>

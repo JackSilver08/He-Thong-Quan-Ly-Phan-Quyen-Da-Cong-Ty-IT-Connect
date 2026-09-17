@@ -77,9 +77,9 @@ export function PageHeader({ eyebrow, title, description, actions }: { eyebrow: 
   );
 }
 
-export function Card({ title, description, actions, children, className }: { title?: string; description?: ReactNode; actions?: ReactNode; children: ReactNode; className?: string }) {
+export function Card({ title, description, actions, children, className, style }: { title?: string; description?: ReactNode; actions?: ReactNode; children: ReactNode; className?: string; style?: React.CSSProperties }) {
   return (
-    <section className={`card${className ? ` ${className}` : ''}`}>
+    <section className={`card${className ? ` ${className}` : ''}`} style={style}>
       {title && (
         <header className="card-header">
           <div>

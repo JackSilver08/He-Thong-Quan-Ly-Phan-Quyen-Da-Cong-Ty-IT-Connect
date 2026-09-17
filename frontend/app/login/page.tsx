@@ -28,10 +28,17 @@ export default function Login() {
     }
     setLoading(true);
     try {
-      const data = await api<{ token: string }>('/auth/login', { method: 'POST', body: JSON.stringify({ username: username.trim(), password }) });
+      const data = await api<{ token: string; user?: { role?: string } }>('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ username: username.trim(), password }),
+      });
       setToken(data.token);
       toast.success('Đăng nhập thành công', 'Chào mừng bạn trở lại IT Connect.');
-      router.replace('/');
+      if (data.user?.role === 'USER') {
+        router.replace('/my-access');
+      } else {
+        router.replace('/');
+      }
     } catch (err) {
       toast.error('Đăng nhập thất bại', errorMessage(err));
       setLoading(false);

@@ -12,6 +12,8 @@ import (
 	"github.com/it-connect/access-management/internal/auth"
 	"github.com/it-connect/access-management/internal/config"
 	"github.com/it-connect/access-management/internal/domain"
+	"github.com/it-connect/access-management/internal/exporter"
+	"github.com/it-connect/access-management/internal/importer"
 	"github.com/it-connect/access-management/internal/repository"
 )
 
@@ -55,7 +57,7 @@ func fail(c *gin.Context, err error, notFoundMsg, conflictMsg string) {
 
 func bind(c *gin.Context, dst any) bool {
 	if err := c.ShouldBindJSON(dst); err != nil {
-		respondError(c, http.StatusBadRequest, "invalid payload")
+		respondError(c, http.StatusBadRequest, "invalid payload: "+err.Error())
 		return false
 	}
 	return true
@@ -647,3 +649,277 @@ func normalizeLevel(level string) (string, bool) {
 		return "", false
 	}
 }
+
+// ---------------------------------------------------------------- User Portal
+
+func (h *Handler) GetMyAccess(c *gin.Context) {
+	u := caller(c)
+	summary, err := h.Repo.GetUserAccessSummary(c, u.UserID)
+	if err != nil {
+		fail(c, err, "", "")
+		return
+	}
+	c.JSON(http.StatusOK, summary)
+}
+
+// ---------------------------------------------------------------- Resources (Folders)
+
+func (h *Handler) ListResources(c *gin.Context) {
+	projectID, ok := pathID(c, "project not found")
+	if !ok {
+		return
+	}
+	items, err := h.Repo.ListProjectResources(c, projectID)
+	if err != nil {
+		fail(c, err, "", "")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": items})
+}
+
+func (h *Handler) CreateResource(c *gin.Context) {
+	projectID, ok := pathID(c, "project not found")
+	if !ok {
+		return
+	}
+	var req domain.Resource
+	if !bind(c, &req) {
+		return
+	}
+	if strings.TrimSpace(req.Name) == "" {
+		respondError(c, http.StatusBadRequest, "name is required")
+		return
+	}
+	req.ProjectID = projectID
+	if req.ResourceType == "" {
+		req.ResourceType = "FOLDER"
+	}
+	out, err := h.Repo.CreateResource(c, req)
+	if err != nil {
+		fail(c, err, "", "resource path may already exist in this project")
+		return
+	}
+	h.audit(c, "CREATE", "RESOURCE", &out.ID, map[string]any{"name": out.Name, "project_id": projectID})
+	c.JSON(http.StatusCreated, out)
+}
+
+func (h *Handler) DeleteResource(c *gin.Context) {
+	id, ok := pathID(c, "resource not found")
+	if !ok {
+		return
+	}
+	if err := h.Repo.DeleteResource(c, id); err != nil {
+		fail(c, err, "resource not found", "")
+		return
+	}
+	h.audit(c, "DELETE", "RESOURCE", &id, nil)
+	c.Status(http.StatusNoContent)
+}
+
+// ---------------------------------------------------------------- Project Members
+
+func (h *Handler) ListProjectMembers(c *gin.Context) {
+	projectID, ok := pathID(c, "project not found")
+	if !ok {
+		return
+	}
+	items, err := h.Repo.ListProjectMembers(c, projectID)
+	if err != nil {
+		fail(c, err, "", "")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": items})
+}
+
+func (h *Handler) AddProjectMember(c *gin.Context) {
+	projectID, ok := pathID(c, "project not found")
+	if !ok {
+		return
+	}
+	var req struct {
+		UserID      string `json:"user_id"`
+		ProjectRole string `json:"project_role"`
+	}
+	if !bind(c, &req) {
+		return
+	}
+	if req.UserID == "" || !uuidPattern.MatchString(req.UserID) {
+		respondError(c, http.StatusBadRequest, "valid user_id is required")
+		return
+	}
+	m, err := h.Repo.AddProjectMember(c, projectID, req.UserID, req.ProjectRole)
+	if err != nil {
+		fail(c, err, "", "")
+		return
+	}
+	h.audit(c, "ADD_MEMBER", "PROJECT", &projectID, map[string]any{"user_id": req.UserID, "role": req.ProjectRole})
+	c.JSON(http.StatusOK, m)
+}
+
+func (h *Handler) RemoveProjectMember(c *gin.Context) {
+	projectID, ok := pathID(c, "project not found")
+	if !ok {
+		return
+	}
+	userID := c.Param("userId")
+	if !uuidPattern.MatchString(userID) {
+		respondError(c, http.StatusBadRequest, "invalid user_id")
+		return
+	}
+	if err := h.Repo.RemoveProjectMember(c, projectID, userID); err != nil {
+		fail(c, err, "member not found", "")
+		return
+	}
+	h.audit(c, "REMOVE_MEMBER", "PROJECT", &projectID, map[string]any{"user_id": userID})
+	c.Status(http.StatusNoContent)
+}
+
+// ---------------------------------------------------------------- Excel Export
+
+func (h *Handler) ExportUsers(c *gin.Context) {
+	users, err := h.Repo.ListUsers(c, "", "", "", "")
+	if err != nil {
+		fail(c, err, "", "")
+		return
+	}
+	b, err := exporter.ExportUsers(users)
+	if err != nil {
+		fail(c, err, "", "")
+		return
+	}
+	c.Header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	c.Header("Content-Disposition", `attachment; filename="Users.xlsx"`)
+	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", b)
+}
+
+func (h *Handler) ExportProjects(c *gin.Context) {
+	projects, err := h.Repo.ListProjects(c, "", "")
+	if err != nil {
+		fail(c, err, "", "")
+		return
+	}
+	b, err := exporter.ExportProjects(projects)
+	if err != nil {
+		fail(c, err, "", "")
+		return
+	}
+	c.Header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	c.Header("Content-Disposition", `attachment; filename="Projects.xlsx"`)
+	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", b)
+}
+
+func (h *Handler) ExportResigned(c *gin.Context) {
+	allUsers, err := h.Repo.ListUsers(c, "", "", "", "")
+	if err != nil {
+		fail(c, err, "", "")
+		return
+	}
+	userMap := make(map[string]domain.User)
+	for _, u := range allUsers {
+		userMap[u.ID] = u
+	}
+	perms, _ := h.Repo.ListPermissions(c, "", "")
+	accessCountMap := make(map[string]int)
+	for _, p := range perms {
+		if p.Level != "NONE" {
+			accessCountMap[p.UserID]++
+		}
+	}
+
+	b, err := exporter.ExportResigned(allUsers, userMap, accessCountMap)
+	if err != nil {
+		fail(c, err, "", "")
+		return
+	}
+	c.Header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	c.Header("Content-Disposition", `attachment; filename="Resigned_Employees.xlsx"`)
+	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", b)
+}
+
+func (h *Handler) ExportPermissionMatrix(c *gin.Context) {
+	companyID := c.Query("company_id")
+	companies, err := h.Repo.ListCompanies(c, "")
+	if err != nil {
+		fail(c, err, "", "")
+		return
+	}
+	companyName := "Tất cả công ty"
+	if companyID != "" {
+		for _, comp := range companies {
+			if comp.ID == companyID {
+				companyName = comp.Name
+				break
+			}
+		}
+	}
+
+	users, err := h.Repo.ListUsers(c, "", "", companyID, "")
+	if err != nil {
+		fail(c, err, "", "")
+		return
+	}
+	projects, err := h.Repo.ListProjects(c, "", companyID)
+	if err != nil {
+		fail(c, err, "", "")
+		return
+	}
+	permissions, err := h.Repo.ListPermissions(c, "", "")
+	if err != nil {
+		fail(c, err, "", "")
+		return
+	}
+
+	b, err := exporter.ExportPermissionMatrix(companyName, users, projects, permissions)
+	if err != nil {
+		fail(c, err, "", "")
+		return
+	}
+	c.Header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	c.Header("Content-Disposition", `attachment; filename="Permission_Matrix.xlsx"`)
+	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", b)
+}
+
+// ---------------------------------------------------------------- Excel Import
+
+func (h *Handler) ImportPreview(c *gin.Context) {
+	file, err := c.FormFile("file")
+	if err != nil {
+		respondError(c, http.StatusBadRequest, "file is required")
+		return
+	}
+	f, err := file.Open()
+	if err != nil {
+		respondError(c, http.StatusBadRequest, "cannot read file")
+		return
+	}
+	defer f.Close()
+
+	preview, err := importer.ParseAndPreviewExcel(f)
+	if err != nil {
+		respondError(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	c.JSON(http.StatusOK, preview)
+}
+
+func (h *Handler) ImportCommit(c *gin.Context) {
+	var req struct {
+		CompanyID string                 `json:"company_id"`
+		Preview   importer.ImportPreview `json:"preview"`
+	}
+	if !bind(c, &req) {
+		return
+	}
+	if req.CompanyID == "" {
+		respondError(c, http.StatusBadRequest, "company_id is required")
+		return
+	}
+	imported, err := importer.CommitImport(c, h.Repo, req.Preview, req.CompanyID, "User@123456")
+	if err != nil {
+		fail(c, err, "", "")
+		return
+	}
+	h.audit(c, "IMPORT_EXCEL", "COMPANY", &req.CompanyID, map[string]any{"imported_users": imported})
+	c.JSON(http.StatusOK, gin.H{"imported_users": imported})
+}
+

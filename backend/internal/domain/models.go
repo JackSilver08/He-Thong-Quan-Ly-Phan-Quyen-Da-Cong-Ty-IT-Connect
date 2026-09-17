@@ -101,3 +101,53 @@ type AuditLog struct {
 	Details     map[string]any `json:"details"`
 	CreatedAt   time.Time      `json:"created_at"`
 }
+
+type Resource struct {
+	ID           string    `json:"id"`
+	ProjectID    string    `json:"project_id"`
+	ParentID     *string   `json:"parent_id,omitempty"`
+	Name         string    `json:"name"`
+	Path         string    `json:"path"`
+	ResourceType string    `json:"resource_type"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+type ProjectMember struct {
+	ID           string     `json:"id"`
+	ProjectID    string     `json:"project_id"`
+	UserID       string     `json:"user_id"`
+	ProjectRole  string     `json:"project_role"`
+	JoinedAt     *time.Time `json:"joined_at,omitempty"`
+	LeftAt       *time.Time `json:"left_at,omitempty"`
+	FullName     string     `json:"full_name"`
+	EmployeeCode string     `json:"employee_code"`
+	Username     string     `json:"username,omitempty"`
+	Email        string     `json:"email,omitempty"`
+	Status       string     `json:"status"`
+}
+
+type MyAccessProject struct {
+	ProjectID     string `json:"project_id"`
+	ProjectCode   string `json:"project_code"`
+	ProjectName   string `json:"project_name"`
+	CompanyName   string `json:"company_name"`
+	FolderPath    string `json:"folder_path"`
+	Level         string `json:"level"`
+	ResourceCount int    `json:"resource_count"`
+}
+
+type MyAccessResource struct {
+	ResourceID   string  `json:"resource_id"`
+	ProjectID    string  `json:"project_id"`
+	ProjectCode  string  `json:"project_code"`
+	ProjectName  string  `json:"project_name"`
+	ResourceName string  `json:"resource_name"`
+	Path         string  `json:"path"`
+	Level        string  `json:"level"`
+	ParentID     *string `json:"parent_id,omitempty"`
+}
+
+type UserAccessSummary struct {
+	Projects  []MyAccessProject  `json:"projects"`
+	Resources []MyAccessResource `json:"resources"`
+}

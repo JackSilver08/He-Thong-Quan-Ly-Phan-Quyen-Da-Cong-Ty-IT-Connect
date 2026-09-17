@@ -7,7 +7,9 @@ import { Icon } from './ui/Icon';
 export function LevelLetter({ level, conflict }: { level?: string; conflict?: boolean }) {
   if (conflict) return <span className="level-letter level-CONFLICT">!</span>;
   if (!level) return <span className="level-letter level-EMPTY">–</span>;
-  return <span className={`level-letter level-${level}`}>{LEVELS[level]?.short ?? '?'}</span>;
+  const norm = level.trim().toUpperCase();
+  const short = LEVELS[norm]?.short ?? (norm === 'WRITE' || norm === 'W' ? 'W' : norm === 'READ' || norm === 'R' ? 'R' : 'X');
+  return <span className={`level-letter level-${short}`}>{short}</span>;
 }
 
 /** Nhãn mức quyền; nếu dữ liệu bị trùng với nhiều mức khác nhau thì hiện cảnh báo xung đột. */
@@ -21,10 +23,13 @@ export function LevelBadge({ entry }: { entry: Pick<PermissionEntry, 'level' | '
       </span>
     );
   }
+  const norm = (entry.level ?? '').trim().toUpperCase();
+  const info = LEVELS[norm] ?? { label: norm || 'Chưa đặt', short: norm || '–' };
+  const short = info.short;
   return (
-    <span className="level-badge">
-      <LevelLetter level={entry.level} />
-      {LEVELS[entry.level]?.label ?? entry.level}
+    <span className={`level-badge level-badge-${short}`} title={info.description}>
+      <LevelLetter level={short} />
+      <span className="level-badge-label">{info.label}</span>
     </span>
   );
 }

@@ -7,6 +7,8 @@ import { byId, clearQuery, labelOf, matches, readQuery, ROLE_ORDER, ROLES, USER_
 import { useForm, useList } from '@/lib/hooks';
 import { groupPermissions, hasAccess, revokeEntries, type PermissionEntry } from '@/lib/permissions';
 import type { Company, Department, Permission, Project, User } from '@/lib/types';
+import { downloadExcel } from '@/lib/export';
+import { ImportModal } from '@/components/ImportModal';
 import { useCanManage, useMe } from '@/components/AppShell';
 import { Button } from '@/components/ui/Button';
 import { useConfirm } from '@/components/ui/Confirm';
@@ -37,6 +39,8 @@ export default function UsersPage() {
   const [filters, setFilters] = useState<Filters>(noFilters);
   const [editor, setEditor] = useState<{ open: boolean; user: User | null }>({ open: false, user: null });
   const [resign, setResign] = useState<{ open: boolean; user: User | null }>({ open: false, user: null });
+  const [importOpen, setImportOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     if (readQuery('new')) setEditor({ open: true, user: null });
@@ -157,11 +161,36 @@ export default function UsersPage() {
         title="Nhân viên"
         description="Hồ sơ nhân sự, tài khoản đăng nhập và vòng đời truy cập."
         actions={
-          canManage && (
-            <Button variant="primary" icon="user-plus" onClick={openCreate}>
-              Thêm nhân viên
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <Button
+              variant="secondary"
+              icon="download"
+              loading={exporting}
+              onClick={async () => {
+                setExporting(true);
+                try {
+                  await downloadExcel('/export/users', 'Danh_sach_nhan_su.xlsx');
+                  toast.success('Đã xuất file Excel thành công');
+                } catch (err) {
+                  toast.error('Không xuất được file', errorMessage(err));
+                } finally {
+                  setExporting(false);
+                }
+              }}
+            >
+              Xuất Excel
             </Button>
-          )
+            {canManage && (
+              <>
+                <Button variant="secondary" icon="upload" onClick={() => setImportOpen(true)}>
+                  Nhập Excel
+                </Button>
+                <Button variant="primary" icon="user-plus" onClick={openCreate}>
+                  Thêm nhân viên
+                </Button>
+              </>
+            )}
+          </div>
         }
       />
       <Card>
@@ -251,6 +280,13 @@ export default function UsersPage() {
           users.reload();
           permissions.reload();
         }}
+      />
+      <ImportModal
+        open={importOpen}
+        companies={companies.data}
+        defaultCompanyId={filters.companyId}
+        onClose={() => setImportOpen(false)}
+        onSuccess={() => users.reload()}
       />
     </>
   );

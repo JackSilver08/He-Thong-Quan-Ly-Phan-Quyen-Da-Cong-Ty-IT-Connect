@@ -30,7 +30,7 @@ type ModalProps = {
   description?: ReactNode;
   icon?: ReactNode;
   tone?: 'blue' | 'red' | 'amber';
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg' | 'xl';
   children?: ReactNode;
   footer?: ReactNode;
   /** Có onSubmit thì nội dung + footer được bọc trong <form> (Enter để gửi). */

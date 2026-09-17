@@ -4,7 +4,9 @@ import { api, errorMessage } from '@/lib/api';
 import { byId, clearQuery, labelOf, LEVELS, LEVEL_ORDER, matches, readQuery, USER_STATUS } from '@/lib/format';
 import { useForm, useList } from '@/lib/hooks';
 import { entryKey, groupPermissions, hasAccess, type PermissionEntry } from '@/lib/permissions';
-import type { Company, Permission, Project, User } from '@/lib/types';
+import type { Company, Permission, Project, Resource, User } from '@/lib/types';
+import { downloadExcel } from '@/lib/export';
+import { ImportModal } from '@/components/ImportModal';
 import { useCanManage } from '@/components/AppShell';
 import { LevelBadge, LevelLetter, LevelPicker } from '@/components/PermissionLevel';
 import { Button } from '@/components/ui/Button';
@@ -36,6 +38,8 @@ export default function PermissionsPage() {
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState<Filters>(noFilters);
   const [grant, setGrant] = useState<{ open: boolean; initial: GrantInitial }>({ open: false, initial: {} });
+  const [importOpen, setImportOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   // Liên kết từ trang khác: ?user=, ?project= để lọc sẵn; ?new=1 để mở popup cấp quyền.
   useEffect(() => {
@@ -185,11 +189,36 @@ export default function PermissionsPage() {
         title="Phân quyền"
         description="Ai được vào dự án nào, với mức quyền gì."
         actions={
-          canManage && (
-            <Button variant="primary" icon="plus" onClick={openGrant}>
-              Cấp quyền
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <Button
+              variant="secondary"
+              icon="download"
+              loading={exporting}
+              onClick={async () => {
+                setExporting(true);
+                try {
+                  await downloadExcel('/export/permissions', 'Ma_tran_phan_quyen.xlsx');
+                  toast.success('Đã xuất file Ma trận phân quyền Excel');
+                } catch (err) {
+                  toast.error('Không xuất được file', errorMessage(err));
+                } finally {
+                  setExporting(false);
+                }
+              }}
+            >
+              Xuất Excel (Ma trận)
             </Button>
-          )
+            {canManage && (
+              <>
+                <Button variant="secondary" icon="upload" onClick={() => setImportOpen(true)}>
+                  Nhập Excel
+                </Button>
+                <Button variant="primary" icon="plus" onClick={openGrant}>
+                  Cấp quyền
+                </Button>
+              </>
+            )}
+          </div>
         }
       />
 
@@ -279,6 +308,12 @@ export default function PermissionsPage() {
         entries={entries}
         onClose={() => setGrant((g) => ({ ...g, open: false }))}
         onSaved={permissions.reload}
+      />
+      <ImportModal
+        open={importOpen}
+        companies={companies.data}
+        onClose={() => setImportOpen(false)}
+        onSuccess={() => permissions.reload()}
       />
     </>
   );
@@ -472,10 +507,25 @@ function GrantModal({ open, initial, users, projects, entries, onClose, onSaved 
   const toast = useToast();
   const form = useForm({ user_id: '', project_id: '', level: 'READ' });
   const { values, set, errors, busy, reset } = form;
+  const [resources, setResources] = useState<Resource[]>([]);
+  const [selectedResourceId, setSelectedResourceId] = useState<string>('');
 
   useEffect(() => {
-    if (open) reset({ user_id: initial.user_id ?? '', project_id: initial.project_id ?? '', level: initial.level ?? 'READ' });
+    if (open) {
+      reset({ user_id: initial.user_id ?? '', project_id: initial.project_id ?? '', level: initial.level ?? 'READ' });
+      setSelectedResourceId(initial.resource_id ?? '');
+    }
   }, [open, initial, reset]);
+
+  useEffect(() => {
+    if (values.project_id) {
+      api<{ data: Resource[] }>(`/projects/${values.project_id}/resources`)
+        .then((res) => setResources(res.data || []))
+        .catch(() => setResources([]));
+    } else {
+      setResources([]);
+    }
+  }, [values.project_id]);
 
   const userOptions = useMemo<Option[]>(
     () =>
@@ -486,7 +536,7 @@ function GrantModal({ open, initial, users, projects, entries, onClose, onSaved 
   );
   const projectOptions = useMemo<Option[]>(() => projects.map((p) => ({ value: p.id, label: `${p.code} · ${p.name}`, description: p.company_name })), [projects]);
 
-  const resourceId = initial.resource_id ?? null;
+  const resourceId = initial.resource_id !== undefined ? initial.resource_id : (selectedResourceId || null);
   const existing = entries.find((e) => e.user_id === values.user_id && e.project_id === values.project_id && e.resource_id === resourceId);
   const user = users.find((u) => u.id === values.user_id);
   const project = projects.find((p) => p.id === values.project_id);
@@ -540,6 +590,18 @@ function GrantModal({ open, initial, users, projects, entries, onClose, onSaved 
             <Field label="Dự án" required error={errors.project_id}>
               <Combobox options={projectOptions} value={values.project_id} onChange={(value) => set('project_id', value)} placeholder="Tìm theo mã hoặc tên dự án..." />
             </Field>
+            {values.project_id && (
+              <Field label="Phạm vi cấp quyền (Thư mục)" hint={resources.length ? undefined : 'Dự án chưa có thư mục con, mặc định cấp toàn dự án'}>
+                <Select value={selectedResourceId} onChange={(e) => setSelectedResourceId(e.target.value)}>
+                  <option value="">📁 Toàn bộ dự án (Thư mục gốc)</option>
+                  {resources.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      📂 {r.path || r.name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            )}
           </>
         )}
         {existing && !initial.locked && (
@@ -548,7 +610,7 @@ function GrantModal({ open, initial, users, projects, entries, onClose, onSaved 
               <>Cặp nhân viên – dự án này đang có nhiều bản ghi trùng nhau ({existing.levels.map((l) => LEVELS[l]?.label ?? l).join(', ')}).</>
             ) : (
               <>
-                Nhân viên đang có quyền <strong>{LEVELS[existing.level]?.label}</strong> với dự án này. Lưu sẽ đổi sang mức mới.
+                Nhân viên đang có quyền <strong>{LEVELS[existing.level]?.label}</strong> với phạm vi này. Lưu sẽ đổi sang mức mới.
               </>
             )}
           </Alert>

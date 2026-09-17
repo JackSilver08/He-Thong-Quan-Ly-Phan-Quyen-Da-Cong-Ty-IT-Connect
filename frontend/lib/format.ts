@@ -25,6 +25,9 @@ export const LEVELS: Record<string, Label & { short: string; description: string
   NONE: { label: 'Không truy cập', short: 'X', tone: 'gray', description: 'Chặn hoàn toàn quyền vào dự án' },
   READ: { label: 'Chỉ xem', short: 'R', tone: 'sky', description: 'Xem và tải tài liệu, không được chỉnh sửa' },
   WRITE: { label: 'Chỉnh sửa', short: 'W', tone: 'blue', description: 'Xem, tạo mới và chỉnh sửa tài liệu' },
+  X: { label: 'Không truy cập', short: 'X', tone: 'gray', description: 'Chặn hoàn toàn quyền vào dự án' },
+  R: { label: 'Chỉ xem', short: 'R', tone: 'sky', description: 'Xem và tải tài liệu, không được chỉnh sửa' },
+  W: { label: 'Chỉnh sửa', short: 'W', tone: 'blue', description: 'Xem, tạo mới và chỉnh sửa tài liệu' },
 };
 export const LEVEL_ORDER = ['NONE', 'READ', 'WRITE'];
 

@@ -64,3 +64,78 @@ export type AuditLog = {
   details: Record<string, unknown> | null;
   created_at: string;
 };
+
+export type Resource = {
+  id: string;
+  project_id: string;
+  parent_id?: string | null;
+  name: string;
+  path: string;
+  resource_type: string;
+  created_at: string;
+};
+
+export type ProjectMember = {
+  id: string;
+  project_id: string;
+  user_id: string;
+  project_role: string;
+  joined_at?: string | null;
+  left_at?: string | null;
+  full_name: string;
+  employee_code: string;
+  username?: string;
+  email?: string;
+  status: string;
+};
+
+export type MyAccessProject = {
+  project_id: string;
+  project_code: string;
+  project_name: string;
+  company_name: string;
+  folder_path: string;
+  level: string;
+  resource_count: number;
+};
+
+export type MyAccessResource = {
+  resource_id: string;
+  project_id: string;
+  project_code: string;
+  project_name: string;
+  resource_name: string;
+  path: string;
+  level: string;
+  parent_id?: string | null;
+};
+
+export type UserAccessSummary = {
+  projects: MyAccessProject[];
+  resources: MyAccessResource[];
+};
+
+export type ImportUserRow = {
+  employee_code: string;
+  full_name: string;
+  username: string;
+  email: string;
+  phone: string;
+  department_name: string;
+  role: string;
+  status: string;
+  joined_date: string;
+  notes: string;
+  grants: Record<string, string>;
+};
+
+export type ImportPreview = {
+  total_users: number;
+  users: ImportUserRow[];
+  new_departments: string[];
+  detected_projects: string[];
+  total_grants: number;
+  warnings: string[];
+  errors: string[];
+};
+

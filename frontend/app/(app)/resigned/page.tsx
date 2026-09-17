@@ -5,8 +5,11 @@ import { useRouter } from 'next/navigation';
 import { byId, formatDate, matches } from '@/lib/format';
 import { useList } from '@/lib/hooks';
 import { groupPermissions, hasAccess, revokeEntries, type PermissionEntry } from '@/lib/permissions';
-import type { Company, Permission, User } from '@/lib/types';
+import { errorMessage } from '@/lib/api';
+import { downloadExcel } from '@/lib/export';
+import type { User, Company, Permission } from '@/lib/types';
 import { useCanManage } from '@/components/AppShell';
+import { Button } from '@/components/ui/Button';
 import { useConfirm } from '@/components/ui/Confirm';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { Badge, Card, EmptyState, PageHeader, Person } from '@/components/ui/Display';
@@ -26,6 +29,7 @@ export default function ResignedPage() {
   const [query, setQuery] = useState('');
   const [companyId, setCompanyId] = useState('');
   const [onlyWithAccess, setOnlyWithAccess] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const userById = useMemo(() => byId(users.data), [users.data]);
   const accessByUser = useMemo(() => {
@@ -140,7 +144,31 @@ export default function ResignedPage() {
 
   return (
     <>
-      <PageHeader eyebrow="Theo dõi" title="Nghỉ việc" description="Lịch sử nghỉ việc, người tiếp nhận công việc và các quyền truy cập còn tồn đọng." />
+      <PageHeader
+        eyebrow="Theo dõi"
+        title="Nghỉ việc"
+        description="Lịch sử nghỉ việc, người tiếp nhận công việc và các quyền truy cập còn tồn đọng."
+        actions={
+          <Button
+            variant="secondary"
+            icon="download"
+            loading={exporting}
+            onClick={async () => {
+              setExporting(true);
+              try {
+                await downloadExcel('/export/resigned', 'Nhan_vien_nghi_viec.xlsx');
+                toast.success('Đã xuất file Excel thành công');
+              } catch (err) {
+                toast.error('Không xuất được file', errorMessage(err));
+              } finally {
+                setExporting(false);
+              }
+            }}
+          >
+            Xuất Excel
+          </Button>
+        }
+      />
       <Card>
         <Toolbar>
           <SearchInput value={query} onChange={setQuery} placeholder="Tìm nhân viên, người thay thế, ghi chú..." />

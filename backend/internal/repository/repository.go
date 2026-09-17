@@ -605,3 +605,151 @@ func (r *Repository) AddAudit(ctx context.Context, actorID, action, entityType s
 		VALUES($1, $2, $3, $4, $5)`, actorID, action, entityType, entityID, raw)
 	return err
 }
+
+// ---------------------------------------------------------------- Resources (Folders)
+
+func (r *Repository) ListProjectResources(ctx context.Context, projectID string) ([]domain.Resource, error) {
+	rows, err := r.DB.Query(ctx, `
+		SELECT id, project_id, parent_id, name, COALESCE(path, ''), resource_type, created_at
+		FROM resources
+		WHERE project_id = $1
+		ORDER BY path, name`, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := []domain.Resource{}
+	for rows.Next() {
+		var res domain.Resource
+		if err := rows.Scan(&res.ID, &res.ProjectID, &res.ParentID, &res.Name, &res.Path, &res.ResourceType, &res.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, res)
+	}
+	return out, rows.Err()
+}
+
+func (r *Repository) CreateResource(ctx context.Context, res domain.Resource) (domain.Resource, error) {
+	res.Name = strings.TrimSpace(res.Name)
+	res.Path = strings.TrimSpace(res.Path)
+	if res.ResourceType == "" {
+		res.ResourceType = "FOLDER"
+	}
+	err := r.DB.QueryRow(ctx, `
+		INSERT INTO resources(project_id, parent_id, name, path, resource_type)
+		VALUES($1, $2, $3, $4, $5)
+		RETURNING id, created_at`,
+		res.ProjectID, res.ParentID, res.Name, res.Path, res.ResourceType,
+	).Scan(&res.ID, &res.CreatedAt)
+	return res, err
+}
+
+func (r *Repository) DeleteResource(ctx context.Context, resourceID string) error {
+	return requireAffected(r.DB.Exec(ctx, `DELETE FROM resources WHERE id = $1`, resourceID))
+}
+
+// ---------------------------------------------------------------- Project Members
+
+func (r *Repository) ListProjectMembers(ctx context.Context, projectID string) ([]domain.ProjectMember, error) {
+	rows, err := r.DB.Query(ctx, `
+		SELECT pm.id, pm.project_id, pm.user_id, pm.project_role, pm.joined_at, pm.left_at,
+			u.full_name, u.employee_code, u.username, COALESCE(u.email, ''), u.status
+		FROM project_members pm
+		JOIN users u ON u.id = pm.user_id
+		WHERE pm.project_id = $1 AND u.deleted_at IS NULL
+		ORDER BY u.full_name`, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := []domain.ProjectMember{}
+	for rows.Next() {
+		var m domain.ProjectMember
+		if err := rows.Scan(
+			&m.ID, &m.ProjectID, &m.UserID, &m.ProjectRole, &m.JoinedAt, &m.LeftAt,
+			&m.FullName, &m.EmployeeCode, &m.Username, &m.Email, &m.Status,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
+func (r *Repository) AddProjectMember(ctx context.Context, projectID, userID, role string) (domain.ProjectMember, error) {
+	role = strings.TrimSpace(role)
+	if role == "" {
+		role = "MEMBER"
+	}
+	var m domain.ProjectMember
+	m.ProjectID = projectID
+	m.UserID = userID
+	m.ProjectRole = role
+	err := r.DB.QueryRow(ctx, `
+		INSERT INTO project_members(project_id, user_id, project_role)
+		VALUES($1, $2, $3)
+		ON CONFLICT(project_id, user_id)
+		DO UPDATE SET project_role = EXCLUDED.project_role, updated_at = NOW()
+		RETURNING id, joined_at`,
+		projectID, userID, role,
+	).Scan(&m.ID, &m.JoinedAt)
+	return m, err
+}
+
+func (r *Repository) RemoveProjectMember(ctx context.Context, projectID, userID string) error {
+	return requireAffected(r.DB.Exec(ctx, `DELETE FROM project_members WHERE project_id = $1 AND user_id = $2`, projectID, userID))
+}
+
+// ---------------------------------------------------------------- User Portal Access
+
+func (r *Repository) GetUserAccessSummary(ctx context.Context, userID string) (domain.UserAccessSummary, error) {
+	var summary domain.UserAccessSummary
+	summary.Projects = []domain.MyAccessProject{}
+	summary.Resources = []domain.MyAccessResource{}
+
+	projRows, err := r.DB.Query(ctx, `
+		SELECT DISTINCT p.id, p.code, p.name, c.name, COALESCE(p.folder_path, ''), pe.level,
+			(SELECT COUNT(*) FROM resources res WHERE res.project_id = p.id) AS resource_count
+		FROM permissions pe
+		JOIN projects p ON p.id = pe.project_id
+		JOIN companies c ON c.id = p.company_id
+		WHERE pe.user_id = $1 AND pe.resource_id IS NULL AND pe.level != 'NONE' AND p.deleted_at IS NULL
+		ORDER BY p.name`, userID)
+	if err != nil {
+		return summary, err
+	}
+	defer projRows.Close()
+
+	for projRows.Next() {
+		var p domain.MyAccessProject
+		if err := projRows.Scan(&p.ProjectID, &p.ProjectCode, &p.ProjectName, &p.CompanyName, &p.FolderPath, &p.Level, &p.ResourceCount); err != nil {
+			return summary, err
+		}
+		summary.Projects = append(summary.Projects, p)
+	}
+
+	resRows, err := r.DB.Query(ctx, `
+		SELECT res.id, p.id, p.code, p.name, res.name, COALESCE(res.path, ''), pe.level, res.parent_id
+		FROM permissions pe
+		JOIN resources res ON res.id = pe.resource_id
+		JOIN projects p ON p.id = res.project_id
+		WHERE pe.user_id = $1 AND pe.level != 'NONE' AND p.deleted_at IS NULL
+		ORDER BY p.name, res.path`, userID)
+	if err != nil {
+		return summary, err
+	}
+	defer resRows.Close()
+
+	for resRows.Next() {
+		var rf domain.MyAccessResource
+		if err := resRows.Scan(&rf.ResourceID, &rf.ProjectID, &rf.ProjectCode, &rf.ProjectName, &rf.ResourceName, &rf.Path, &rf.Level, &rf.ParentID); err != nil {
+			return summary, err
+		}
+		summary.Resources = append(summary.Resources, rf)
+	}
+
+	return summary, nil
+}
+
