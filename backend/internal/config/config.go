@@ -22,9 +22,15 @@ func Load() Config {
 	if v, err := strconv.Atoi(os.Getenv("JWT_EXPIRES_HOURS")); err == nil && v > 0 {
 		hours = v
 	}
-	origins := []string{"http://localhost:3000"}
+	origins := []string{"http://localhost:3000", "http://127.0.0.1:3000"}
 	if raw := os.Getenv("CORS_ORIGINS"); raw != "" {
-		origins = strings.Split(raw, ",")
+		parts := strings.Split(raw, ",")
+		origins = make([]string, 0, len(parts))
+		for _, p := range parts {
+			if s := strings.TrimSpace(p); s != "" {
+				origins = append(origins, s)
+			}
+		}
 	}
 	return Config{
 		Env:             getenv("APP_ENV", "development"),
