@@ -193,16 +193,16 @@ export default function AppShell({ children }: { children: ReactNode }) {
                 {group.items.map((item) => {
                   const active = isActive(pathname, item.href);
                   return (
-                    <Link key={item.href} href={item.href} className={`nav-link${active ? ' is-active' : ''}`} aria-current={active ? 'page' : undefined}>
+                    <Link key={item.href} href={item.href} title={item.label} className={`nav-link${active ? ' is-active' : ''}`} aria-current={active ? 'page' : undefined}>
                       <Icon name={item.icon} />
-                      <span>{item.label}</span>
+                      <span className="nav-label">{item.label}</span>
                     </Link>
                   );
                 })}
               </div>
             ))}
           </nav>
-          <div className="sidebar-user">
+          <div className="sidebar-user" title={me.full_name}>
             <div className="sidebar-user-avatar-wrap">
               <Avatar name={me.full_name} size="sm" />
               <span className="status-dot-pulse" title="Trực tuyến" />

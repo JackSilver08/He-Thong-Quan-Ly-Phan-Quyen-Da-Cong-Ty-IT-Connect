@@ -128,10 +128,10 @@ a {
   color: var(--blue);
 }
 .app {
-  display: grid;
-  grid-template-columns: 276px minmax(0, 1fr);
+  display: flex;
   min-height: 100vh;
   min-height: 100dvh;
+  width: 100%;
 }
 .sidebar {
   position: sticky;
@@ -140,12 +140,24 @@ a {
   flex-direction: column;
   height: 100vh;
   height: 100dvh;
-  padding: 18px 14px 14px;
+  width: 78px;
+  flex-shrink: 0;
+  padding: 18px 12px 14px;
+  overflow-x: hidden;
   overflow-y: auto;
   background: var(--sidebar);
   border-right: 1px solid var(--sidebar-border);
   color: var(--sidebar-text);
   box-shadow: 4px 0 24px rgba(0, 0, 0, 0.15);
+  z-index: 50;
+  transition: width 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+              padding 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.sidebar:hover {
+  width: 276px;
+  padding: 18px 14px 14px;
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.25);
 }
 
 .brand-wrapper {
@@ -153,6 +165,7 @@ a {
   display: flex;
   justify-content: center;
   align-items: center;
+  flex-shrink: 0;
 }
 .brand-link {
   display: flex;
@@ -164,20 +177,29 @@ a {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 96px;
-  height: 96px;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
   background: #ffffff;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.12);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.12);
   overflow: hidden;
-  padding: 12px;
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  padding: 6px;
+  transition: width 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+              height 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+              padding 0.28s ease,
+              box-shadow 0.28s ease,
+              transform 0.2s ease;
   cursor: pointer;
   flex-shrink: 0;
 }
+.sidebar:hover .brand-circle {
+  width: 96px;
+  height: 96px;
+  padding: 12px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.42), 0 0 0 2px rgba(255, 255, 255, 0.25);
+}
 .brand-circle:hover {
   transform: translateY(-2px) scale(1.04);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.42), 0 0 0 2px rgba(255, 255, 255, 0.25);
 }
 .brand-circle:active {
   transform: translateY(0) scale(0.98);
@@ -185,16 +207,20 @@ a {
 .brand-logo-circle {
   width: 100%;
   height: auto;
-  max-height: 40px;
+  max-height: 22px;
   object-fit: contain;
   display: block;
+  transition: max-height 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.sidebar:hover .brand-logo-circle {
+  max-height: 40px;
 }
 
 .nav {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 18px;
+  gap: 16px;
 }
 .nav-group {
   display: flex;
@@ -202,26 +228,66 @@ a {
   gap: 4px;
 }
 .nav-group-label {
-  margin: 0 0 6px;
+  margin: 0;
   padding: 0 12px;
   color: #475569;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  opacity: 0;
+  max-height: 0;
+  transition: opacity 0.2s ease, max-height 0.25s cubic-bezier(0.16, 1, 0.3, 1), margin 0.25s ease;
 }
+.sidebar:hover .nav-group-label {
+  opacity: 1;
+  max-height: 24px;
+  margin: 0 0 6px;
+}
+.nav-group + .nav-group {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: 10px;
+}
+.sidebar:hover .nav-group + .nav-group {
+  border-top-color: transparent;
+  padding-top: 0;
+}
+
 .nav-link {
   display: flex;
   align-items: center;
-  gap: 12px;
-  height: 40px;
-  padding: 0 16px;
-  border-radius: 999px;
+  justify-content: center;
+  gap: 0;
+  height: 42px;
+  width: 42px;
+  padding: 0;
+  margin: 0 auto;
+  border-radius: 50%;
   color: var(--sidebar-text);
   font-weight: 600;
   font-size: 13.5px;
   border: 1px solid transparent;
-  transition: all 0.2s ease;
+  transition: width 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+              height 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+              padding 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+              gap 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+              border-radius 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+              background 0.2s ease,
+              border-color 0.2s ease,
+              box-shadow 0.2s ease;
+  overflow: hidden;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.sidebar:hover .nav-link {
+  width: 100%;
+  padding: 0 16px;
+  gap: 12px;
+  justify-content: flex-start;
+  margin: 0;
+  border-radius: 999px;
 }
 .nav-link:hover {
   background: rgba(255, 255, 255, 0.08);
@@ -238,24 +304,71 @@ a {
   color: #60a5fa;
   filter: drop-shadow(0 0 6px rgba(59, 130, 246, 0.5));
 }
+.nav-link svg {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: block;
+}
+.nav-label {
+  opacity: 0;
+  max-width: 0;
+  width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  pointer-events: none;
+  transition: opacity 0.18s ease, max-width 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+  display: inline-block;
+}
+.sidebar:hover .nav-label {
+  opacity: 1;
+  max-width: 180px;
+  width: auto;
+  pointer-events: auto;
+  transition: opacity 0.22s ease 0.08s, max-width 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
 .sidebar-user {
   display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: center;
+  gap: 0;
   margin-top: auto;
-  padding: 8px 12px 8px 8px;
-  border-radius: 999px;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  margin-left: auto;
+  margin-right: auto;
+  border-radius: 50%;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);
   min-width: 0;
-  transition: all 0.2s ease;
+  overflow: hidden;
+  transition: all 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+  flex-shrink: 0;
+}
+.sidebar:hover .sidebar-user {
+  width: 100%;
+  height: auto;
+  min-height: 48px;
+  padding: 8px 12px 8px 8px;
+  border-radius: 999px;
+  gap: 10px;
+  justify-content: flex-start;
+  margin-left: 0;
+  margin-right: 0;
 }
 .sidebar-user:hover {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.14);
 }
 .sidebar-user-avatar-wrap {
   position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
   flex-shrink: 0;
 }
 .status-dot-pulse {
@@ -271,10 +384,24 @@ a {
 }
 .sidebar-user-info {
   display: flex;
-  flex: 1;
   flex-direction: column;
   min-width: 0;
   overflow: hidden;
+  opacity: 0;
+  width: 0;
+  max-width: 0;
+  flex: 0 0 0;
+  white-space: nowrap;
+  pointer-events: none;
+  transition: opacity 0.18s ease, max-width 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.sidebar:hover .sidebar-user-info {
+  opacity: 1;
+  width: auto;
+  max-width: 180px;
+  flex: 1;
+  pointer-events: auto;
+  transition: opacity 0.22s ease 0.06s, max-width 0.28s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .sidebar-user-name {
   overflow: hidden;
@@ -322,9 +449,27 @@ a {
   color: #94a3b8;
   border-radius: 50%;
   flex-shrink: 0;
+  width: 0;
+  height: 0;
+  max-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  border: 0;
+  padding: 0 !important;
+  margin: 0 !important;
+  transition: all 0.15s ease;
+}
+.sidebar:hover .sidebar-logout {
+  opacity: 1;
   width: 30px;
   height: 30px;
-  transition: all 0.15s ease;
+  max-width: 30px;
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.22s ease 0.06s;
 }
 .sidebar-logout:hover {
   background: rgba(239, 68, 68, 0.15);
@@ -337,7 +482,9 @@ a {
 .app-main {
   display: flex;
   flex-direction: column;
+  flex: 1 1 0%;
   min-width: 0;
+  width: 100%;
 }
 .content {
   width: 100%;
@@ -2165,7 +2312,7 @@ textarea.control {
 
 @media (max-width: 1023px) {
   .app {
-    grid-template-columns: minmax(0, 1fr);
+    display: block;
   }
   .sidebar {
     position: fixed;
@@ -2173,7 +2320,8 @@ textarea.control {
     bottom: 0;
     left: 0;
     z-index: 900;
-    width: min(300px, 86vw);
+    width: min(300px, 86vw) !important;
+    padding: 18px 14px 14px !important;
     transform: translateX(-100%);
     transition: transform 0.25s ease, visibility 0s linear 0.25s;
     visibility: hidden;
@@ -2183,6 +2331,55 @@ textarea.control {
     transition: transform 0.25s ease;
     visibility: visible;
     box-shadow: 24px 0 60px rgba(0, 0, 0, 0.35);
+  }
+  .sidebar .brand-circle {
+    width: 96px !important;
+    height: 96px !important;
+    padding: 12px !important;
+  }
+  .sidebar .brand-logo-circle {
+    max-height: 40px !important;
+  }
+  .sidebar .nav-group-label {
+    opacity: 1 !important;
+    max-height: 24px !important;
+    margin: 0 0 6px !important;
+  }
+  .sidebar .nav-link {
+    width: 100% !important;
+    padding: 0 16px !important;
+    justify-content: flex-start !important;
+    margin: 0 !important;
+  }
+  .sidebar .nav-label {
+    opacity: 1 !important;
+    max-width: none !important;
+  }
+  .sidebar .sidebar-user {
+    width: 100% !important;
+    height: auto !important;
+    padding: 8px 12px 8px 8px !important;
+    justify-content: flex-start !important;
+    margin: 0 !important;
+    gap: 10px !important;
+    border-radius: 999px !important;
+  }
+  .sidebar .sidebar-user-info {
+    opacity: 1 !important;
+    max-width: none !important;
+    width: auto !important;
+    flex: 1 !important;
+    pointer-events: auto !important;
+  }
+  .sidebar .sidebar-logout {
+    opacity: 1 !important;
+    max-width: 30px !important;
+    width: 30px !important;
+    height: 30px !important;
+    pointer-events: auto !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
   }
   .sidebar-backdrop {
     position: fixed;
