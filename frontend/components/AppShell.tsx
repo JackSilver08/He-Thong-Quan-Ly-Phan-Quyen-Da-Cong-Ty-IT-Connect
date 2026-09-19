@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { api, ApiError, getToken, logout } from '@/lib/api';
 import { ROLES } from '@/lib/format';
 import type { User } from '@/lib/types';
-import logo from '@/public/logo.png';
+import logo from '@/public/logo-brand.png';
 import { Button } from './ui/Button';
 import { useConfirm } from './ui/Confirm';
 import { Avatar, EmptyState } from './ui/Display';
@@ -180,15 +180,10 @@ export default function AppShell({ children }: { children: ReactNode }) {
       <div className="app">
         <aside className={`sidebar${navOpen ? ' is-open' : ''}`} aria-label="Điều hướng chính">
           <div className="brand-wrapper">
-            <Link href={me.role === 'USER' ? '/my-access' : '/'} className="brand-header" aria-label="IT Connect – Trang chủ">
-              <div className="brand-icon-box">
-                <Image src={logo} alt="IT Connect" width={32} height={32} priority className="brand-img" />
+            <Link href={me.role === 'USER' ? '/my-access' : '/'} className="brand-link" aria-label="IT Connect – Trang chủ">
+              <div className="brand-circle">
+                <Image src={logo} alt="IT Connect" width={80} height={34} priority className="brand-logo-circle" />
               </div>
-              <div className="brand-meta">
-                <span className="brand-name">IT Connect</span>
-                <span className="brand-desc">Phân quyền File Server</span>
-              </div>
-              <span className="brand-tag">v2.5</span>
             </Link>
           </div>
           <nav className="nav">
