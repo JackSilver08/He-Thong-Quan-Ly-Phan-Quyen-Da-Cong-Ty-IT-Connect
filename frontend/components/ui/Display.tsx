@@ -20,10 +20,15 @@ function avatarTone(name: string) {
   return hash % 5;
 }
 
-export function Avatar({ name, size = 'md' }: { name: string; size?: 'sm' | 'md' }) {
+export function Avatar({ name, size = 'md', src }: { name: string; size?: 'sm' | 'md'; src?: string | null }) {
   return (
-    <span className={`avatar avatar-${size}`} data-tone={avatarTone(name)} aria-hidden="true">
-      {initials(name)}
+    <span
+      className={`avatar avatar-${size}`}
+      data-tone={avatarTone(name)}
+      aria-hidden="true"
+      style={src ? { backgroundImage: `url(${src})`, backgroundSize: 'cover', backgroundPosition: 'center', color: 'transparent' } : undefined}
+    >
+      {!src && initials(name)}
     </span>
   );
 }
