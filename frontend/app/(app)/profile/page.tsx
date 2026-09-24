@@ -1,7 +1,6 @@
 'use client';
 
 import { ChangeEvent, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { api, errorMessage } from '@/lib/api';
 import type { User, UserAccessSummary } from '@/lib/types';
 import { useMe } from '@/components/AppShell';
@@ -37,7 +36,6 @@ function compressImage(file: File): Promise<string> {
 
 export default function ProfilePage() {
   const me = useMe();
-  const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState({ full_name: me?.full_name ?? '', email: me?.email ?? '', phone: me?.phone ?? '' });
   const [avatar, setAvatar] = useState(me?.avatar_url ?? '');
@@ -88,7 +86,7 @@ export default function ProfilePage() {
       setForm({ full_name: updated.full_name, email: updated.email ?? '', phone: updated.phone ?? '' });
       setAvatar(updated.avatar_url ?? '');
       setMessage('Đã lưu thay đổi hồ sơ.');
-      router.refresh();
+      window.location.reload();
     } catch (err) {
       setMessage(errorMessage(err));
     } finally {
