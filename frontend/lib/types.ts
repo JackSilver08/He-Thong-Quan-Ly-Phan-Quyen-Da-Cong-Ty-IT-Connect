@@ -15,6 +15,7 @@ export type User = {
   resigned_at?: string | null;
   replacement_user_id?: string | null;
   notes?: string;
+  avatar_url?: string;
 };
 
 export type Company = {
