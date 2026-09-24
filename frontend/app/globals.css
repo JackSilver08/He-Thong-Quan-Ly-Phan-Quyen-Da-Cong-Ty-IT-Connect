@@ -3665,3 +3665,39 @@ textarea.control {
     width: 100%;
   }
 }
+
+.profile-security-card > .card-header {
+  padding: 18px 20px 14px;
+}
+
+.profile-security-card .profile-security-list {
+  padding: 0 14px 16px;
+  gap: 8px;
+}
+
+.profile-security-card .profile-security-row,
+.profile-security-card .profile-security-row:first-child,
+.profile-security-card .profile-security-row:last-child {
+  min-height: 44px;
+  padding: 9px 12px;
+  border: 1px solid #edf2f7;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.profile-security-card .profile-security-row > span:first-child {
+  color: #667085;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.profile-security-card .profile-security-row strong {
+  color: #0b1220;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.profile-security-card .badge {
+  min-height: 28px;
+  padding: 0 10px;
+}
