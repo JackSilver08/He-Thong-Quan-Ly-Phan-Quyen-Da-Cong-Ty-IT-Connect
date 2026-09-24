@@ -83,6 +83,8 @@ const messages: Record<string, string> = {
   'project update failed': 'Không cập nhật được dự án',
   'user_id and project_id are required': 'Vui lòng chọn nhân viên và dự án',
   'permission save failed, check user/project/resource references': 'Không lưu được quyền, hãy kiểm tra lại nhân viên và dự án',
+  'avatar is invalid': 'Ảnh đại diện không hợp lệ',
+  'avatar is too large': 'Ảnh đại diện quá lớn, hãy chọn ảnh nhỏ hơn',
 };
 
 export function errorMessage(err: unknown, fallback = 'Có lỗi xảy ra, vui lòng thử lại'): string {
