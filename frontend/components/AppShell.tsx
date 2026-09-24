@@ -167,7 +167,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   }
 
   // Chặn người dùng thường (USER) truy cập các trang quản trị, chuyển hướng an toàn về /my-access
-  if (me.role === 'USER' && pathname !== '/my-access') {
+  if (me.role === 'USER' && pathname !== '/my-access' && pathname !== '/profile') {
     return (
       <div className="boot" aria-busy="true">
         <span className="spinner spinner-lg" />
