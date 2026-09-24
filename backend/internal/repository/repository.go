@@ -73,7 +73,7 @@ const userColumns = `
 			COALESCE(u.email, ''), COALESCE(u.phone, ''),
 			u.company_id, u.department_id, d.name, c.name,
 			u.role, u.status, u.joined_at, u.resigned_at,
-			u.replacement_user_id, COALESCE(u.notes, '')
+			u.replacement_user_id, COALESCE(u.notes, ''), COALESCE(u.avatar_url, '')
 		FROM users u
 		JOIN companies c ON c.id = u.company_id
 		LEFT JOIN departments d ON d.id = u.department_id`
@@ -84,7 +84,7 @@ func scanUser(row pgx.Row) (domain.User, error) {
 		&u.ID, &u.EmployeeCode, &u.Username, &u.FullName,
 		&u.Email, &u.Phone, &u.CompanyID, &u.DepartmentID,
 		&u.DepartmentName, &u.CompanyName, &u.Role, &u.Status,
-		&u.JoinedAt, &u.ResignedAt, &u.ReplacementID, &u.Notes,
+		&u.JoinedAt, &u.ResignedAt, &u.ReplacementID, &u.Notes, &u.AvatarURL,
 	)
 	return u, err
 }
@@ -102,7 +102,7 @@ func (r *Repository) FindLoginUser(ctx context.Context, username string) (string
 		SELECT u.id, u.employee_code, u.username, u.full_name,
 			COALESCE(u.email, ''), COALESCE(u.phone, ''),
 			u.company_id, u.department_id, d.name, c.name,
-			u.role, u.status, u.password_hash, COALESCE(u.notes, '')
+			u.role, u.status, u.password_hash, COALESCE(u.notes, ''), COALESCE(u.avatar_url, '')
 		FROM users u
 		JOIN companies c ON c.id = u.company_id
 		LEFT JOIN departments d ON d.id = u.department_id
@@ -111,7 +111,7 @@ func (r *Repository) FindLoginUser(ctx context.Context, username string) (string
 			&u.ID, &u.EmployeeCode, &u.Username, &u.FullName,
 			&u.Email, &u.Phone, &u.CompanyID, &u.DepartmentID,
 			&u.DepartmentName, &u.CompanyName, &u.Role, &u.Status,
-			&hash, &u.Notes,
+			&hash, &u.Notes, &u.AvatarURL,
 		)
 	return hash, u, err
 }
@@ -393,6 +393,29 @@ func (r *Repository) UpdateUser(ctx context.Context, id string, u domain.User) (
 		&u.Role, &u.Status, &u.JoinedAt, &u.Notes,
 	)
 	return u, notFound(err)
+}
+
+func (r *Repository) UpdateProfile(ctx context.Context, id, fullName, email, phone, avatarURL string) (domain.User, error) {
+	err := r.DB.QueryRow(ctx, userColumns+`
+		WHERE u.id = $1 AND u.deleted_at IS NULL`, id).Scan(
+		&domain.User{}.ID,
+	)
+	_ = err
+	var u domain.User
+	err = r.DB.QueryRow(ctx, `
+		UPDATE users
+		SET full_name = $2, email = NULLIF($3, ''), phone = NULLIF($4, ''), avatar_url = $5, updated_at = NOW()
+		WHERE id = $1 AND deleted_at IS NULL
+		RETURNING id, employee_code, username, full_name, COALESCE(email, ''), COALESCE(phone, ''),
+			company_id, department_id, role, status, joined_at, resigned_at, replacement_user_id, COALESCE(notes, ''), COALESCE(avatar_url, '')`,
+		id, strings.TrimSpace(fullName), strings.TrimSpace(email), strings.TrimSpace(phone), avatarURL,
+	).Scan(
+		&u.ID, &u.EmployeeCode, &u.Username, &u.FullName, &u.Email, &u.Phone,
+		&u.CompanyID, &u.DepartmentID, &u.Role, &u.Status, &u.JoinedAt, &u.ResignedAt,
+		&u.ReplacementID, &u.Notes, &u.AvatarURL,
+	)
+	if err != nil { return u, notFound(err) }
+	return u, nil
 }
 
 // DeleteUser soft-deletes a user. Callers are responsible for protecting built-in accounts.
