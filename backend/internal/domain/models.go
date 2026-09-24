@@ -49,6 +49,7 @@ type User struct {
 	ResignedAt     *time.Time `json:"resigned_at,omitempty"`
 	ReplacementID  *string    `json:"replacement_user_id,omitempty"`
 	Notes          string     `json:"notes,omitempty"`
+	AvatarURL      string     `json:"avatar_url,omitempty"`
 }
 
 type Company struct {
