@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -120,6 +121,49 @@ func (h *Handler) Me(c *gin.Context) {
 		fail(c, err, "user not found", "")
 		return
 	}
+	c.JSON(http.StatusOK, u)
+}
+
+// UpdateMyProfile lets every authenticated user manage their own personal information.
+func (h *Handler) UpdateMyProfile(c *gin.Context) {
+	var req struct {
+		FullName string `json:"full_name"`
+		Email    string `json:"email"`
+		Phone    string `json:"phone"`
+		AvatarURL string `json:"avatar_url"`
+	}
+	if !bind(c, &req) { return }
+	if strings.TrimSpace(req.FullName) == "" {
+		respondError(c, http.StatusBadRequest, "full name is required")
+		return
+	}
+	if len(req.AvatarURL) > 800000 {
+		respondError(c, http.StatusBadRequest, "avatar is too large")
+		return
+	}
+	if req.AvatarURL != "" {
+		parts := strings.SplitN(req.AvatarURL, ",", 2)
+		if len(parts) != 2 || !strings.HasPrefix(parts[0], "data:image/") || !strings.HasSuffix(parts[0], ";base64") {
+			respondError(c, http.StatusBadRequest, "avatar is invalid")
+			return
+		}
+		allowed := strings.HasPrefix(parts[0], "data:image/jpeg") || strings.HasPrefix(parts[0], "data:image/png") || strings.HasPrefix(parts[0], "data:image/webp")
+		if !allowed {
+			respondError(c, http.StatusBadRequest, "avatar is invalid")
+			return
+		}
+		decoded, err := base64.StdEncoding.DecodeString(parts[1])
+		if err != nil || len(decoded) > 600000 {
+			respondError(c, http.StatusBadRequest, "avatar is too large")
+			return
+		}
+	}
+	u, err := h.Repo.UpdateProfile(c, caller(c).UserID, req.FullName, req.Email, req.Phone, req.AvatarURL)
+	if err != nil {
+		fail(c, err, "user not found", "")
+		return
+	}
+	h.audit(c, "UPDATE_PROFILE", "USER", &u.ID, map[string]any{"avatar_changed": req.AvatarURL != ""})
 	c.JSON(http.StatusOK, u)
 }
 
