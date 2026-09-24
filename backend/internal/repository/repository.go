@@ -396,12 +396,8 @@ func (r *Repository) UpdateUser(ctx context.Context, id string, u domain.User) (
 }
 
 func (r *Repository) UpdateProfile(ctx context.Context, id, fullName, email, phone, avatarURL string) (domain.User, error) {
-	err := r.DB.QueryRow(ctx, userColumns+`
-		WHERE u.id = $1 AND u.deleted_at IS NULL`, id).Scan(
-		&domain.User{}.ID,
-	)
-	_ = err
 	var u domain.User
+	var err error
 	err = r.DB.QueryRow(ctx, `
 		UPDATE users
 		SET full_name = $2, email = NULLIF($3, ''), phone = NULLIF($4, ''), avatar_url = $5, updated_at = NOW()
