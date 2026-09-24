@@ -227,7 +227,7 @@ export default function ProfilePage() {
           </Card>
 
           <div className="profile-side">
-            <Card title="Tài khoản & bảo mật">
+            <Card className="profile-security-card" title="Tài khoản & bảo mật">
               <div className="profile-security-list">
                 <div className="profile-security-row">
                   <span>Vai trò</span>
