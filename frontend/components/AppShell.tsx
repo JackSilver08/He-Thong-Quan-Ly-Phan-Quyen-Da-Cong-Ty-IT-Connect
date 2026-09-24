@@ -104,7 +104,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   }, [router, loadMe]);
 
   useEffect(() => {
-    if (me && me.role === 'USER' && pathname !== '/my-access') {
+    if (me && me.role === 'USER' && pathname !== '/my-access' && pathname !== '/profile') {
       router.replace('/my-access');
     }
   }, [me, pathname, router]);
@@ -224,7 +224,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
             <button type="button" className="icon-btn icon-btn-dark sidebar-logout" aria-label="Đăng xuất" title="Đăng xuất" onClick={(event) => { event.preventDefault(); event.stopPropagation(); void signOut(); }}>
               <Icon name="log-out" size={16} />
             </button>
-          </div>
+          </Link>
         </aside>
         {navOpen && <div className="sidebar-backdrop" onClick={() => setNavOpen(false)} />}
 
@@ -234,7 +234,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
               <Icon name="menu" />
             </button>
             <span className="mobile-bar-title">{current?.label ?? 'IT Connect'}</span>
-            <Avatar name={me.full_name} size="sm" />
+            <Avatar name={me.full_name} size="sm" src={me.avatar_url} />
           </header>
           <main className="content">{children}</main>
         </div>
