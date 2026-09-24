@@ -80,6 +80,7 @@ func main() {
 	protected := api.Group("")
 	protected.Use(middleware.JWT(cfg.JWTSecret), middleware.CurrentUser(repo), middleware.TenantGuard(repo))
 	protected.GET("/auth/me", h.Me)
+	protected.PUT("/auth/profile", h.UpdateMyProfile)
 	protected.GET("/my/access", h.GetMyAccess)
 
 	// Read access to the admin API: administrators and auditors.
