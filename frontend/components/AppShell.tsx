@@ -202,7 +202,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
               </div>
             ))}
           </nav>
-          <Link href="/profile" className="sidebar-user" title="Mở hồ sơ cá nhân">
+          <div className="sidebar-user" title="Mở hồ sơ cá nhân">
+            <Link href="/profile" style={{ display: 'contents' }} aria-label="Mở hồ sơ cá nhân">
             <div className="sidebar-user-avatar-wrap">
               <Avatar name={me.full_name} size="sm" src={me.avatar_url} />
               <span className="status-dot-pulse" title="Trực tuyến" />
@@ -221,10 +222,11 @@ export default function AppShell({ children }: { children: ReactNode }) {
                 )}
               </div>
             </div>
+            </Link>
             <button type="button" className="icon-btn icon-btn-dark sidebar-logout" aria-label="Đăng xuất" title="Đăng xuất" onClick={(event) => { event.preventDefault(); event.stopPropagation(); void signOut(); }}>
               <Icon name="log-out" size={16} />
             </button>
-          </Link>
+          </div>
         </aside>
         {navOpen && <div className="sidebar-backdrop" onClick={() => setNavOpen(false)} />}
 
